@@ -1,0 +1,63 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class UserEvent extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'user_id',
+        'event_type_id',
+        'starts_at',
+        'ends_at',
+        'status',
+        'has_rest_warning',
+        'warning_reason',
+        'note',
+        'created_by',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'starts_at' => 'datetime',
+            'ends_at' => 'datetime',
+            'has_rest_warning' => 'boolean',
+        ];
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function eventType(): BelongsTo
+    {
+        return $this->belongsTo(EventType::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function durationHours(): float
+    {
+        return $this->starts_at->diffInMinutes($this->ends_at) / 60;
+    }
+
+    public function scopeApproved($query)
+    {
+        return $query->where('status', 'approved');
+    }
+
+    public function scopeOverlappingPeriod($query, $from, $to)
+    {
+        return $query->where('starts_at', '<', $to)->where('ends_at', '>', $from);
+    }
+}

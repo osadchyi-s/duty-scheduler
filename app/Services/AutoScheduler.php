@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\EventType;
+use App\Models\Synergy;
 use App\Models\User;
 use App\Models\UserEvent;
 use Carbon\Carbon;
@@ -16,9 +17,8 @@ use Illuminate\Support\Facades\DB;
  * Алгоритм — жадібний (greedy) із балансуванням навантаження:
  *   для кожного дня періоду і кожного обраного "розкладного" типу події
  *   бере список допущених співробітників (user_event_type_permissions),
- *   сортує їх за поточним сумарним навантаженням (щоб рівномірно розподіляти),
- *   і по черзі пропускає кожного кандидата через ConstraintsEngine, поки
- *   не заповнить min_capacity (або max_capacity, якщо увімкнено fillToMax).
+ *   перевіряє кожного через ConstraintsEngine і випадково обирає з допустимих,
+ *   зважуючи вибір синергією та балансом навантаження.
  *
  * Все, що створюється — статус `draft`: менеджер переглядає й затверджує
  * в самій Матриці чергувань, нічого не потрапляє в графік "наосліп".
@@ -53,11 +53,21 @@ class AutoScheduler
         // Базове навантаження — сума годин наявних робочих подій за весь період (для справедливого старту).
         $workloadHours = $this->initialWorkload($activeUsers, $from, $to);
         $shiftCounts = []; // [user_id][event_type_id] => к-сть змін, призначених у цьому запуску
+        $synergies = Synergy::with('eventTypes:id')->get()->keyBy(
+            fn (Synergy $synergy): string => $this->synergyPairKey($synergy->user_a_id, $synergy->user_b_id)
+        );
 
-        DB::transaction(function () use ($eventTypes, $activeUsers, $from, $to, $fillToMax, &$workloadHours, &$shiftCounts, $result) {
+        DB::transaction(function () use ($eventTypes, $activeUsers, $from, $to, $fillToMax, &$workloadHours, &$shiftCounts, $synergies, $result) {
             for ($day = $from->copy()->startOfDay(); $day->lte($to); $day->addDay()) {
+                $assignedUsersToday = UserEvent::whereIn('event_type_id', $eventTypes->pluck('id'))
+                    ->where('status', '!=', 'cancelled')
+                    ->overlappingPeriod($day->copy()->startOfDay(), $day->copy()->endOfDay())
+                    ->pluck('user_id')
+                    ->unique()
+                    ->flip();
+
                 foreach ($eventTypes as $eventType) {
-                    $this->fillSlot($eventType, $day, $activeUsers, $fillToMax, $workloadHours, $shiftCounts, $result, $to);
+                    $this->fillSlot($eventType, $day, $activeUsers, $fillToMax, $workloadHours, $shiftCounts, $synergies, $assignedUsersToday, $result, $to);
                 }
             }
         });
@@ -79,6 +89,8 @@ class AutoScheduler
         bool $fillToMax,
         array &$workloadHours,
         array &$shiftCounts,
+        Collection $synergies,
+        Collection $assignedUsersToday,
         AutoScheduleResult $result,
         Carbon $rangeEnd,
     ): void {
@@ -133,7 +145,7 @@ class AutoScheduler
                 ])
                 ->values();
 
-            $assignedThisRound = false;
+            $validCandidates = [];
 
             foreach ($candidates as $candidate) {
                 $check = $this->engine->validate($candidate, $eventType, $startsAt, $endsAt);
@@ -142,39 +154,50 @@ class AutoScheduler
                     continue;
                 }
 
-                UserEvent::create([
-                    'user_id' => $candidate->id,
-                    'event_type_id' => $eventType->id,
-                    'starts_at' => $startsAt,
-                    'ends_at' => $endsAt,
-                    'status' => 'draft',
-                    'has_rest_warning' => $check->status === ConstraintCheckResult::STATUS_WARNING,
-                    'warning_reason' => $check->reason,
-                    'note' => 'Автогенерація графіка',
-                ]);
-
-                if ($eventType->is_work_time) {
-                    $workloadHours[$candidate->id] = ($workloadHours[$candidate->id] ?? 0) + $eventType->default_duration_hours;
-                }
-                $shiftCounts[$candidate->id][$eventType->id] = ($shiftCounts[$candidate->id][$eventType->id] ?? 0) + 1;
-                $assignedTodayThisType->put($candidate->id, true);
-
-                $result->addCreated(
-                    $day->format('d.m.Y'),
-                    $eventType->name,
-                    $candidate->name,
-                    $check->status
-                );
-
-                $needed--;
-                $filled++;
-                $assignedThisRound = true;
-                break;
+                $validCandidates[] = [
+                    'user' => $candidate,
+                    'check' => $check,
+                    'synergy' => $this->synergyScore($candidate, $assignedUsersToday, $eventType, $synergies),
+                ];
             }
 
-            if (! $assignedThisRound) {
+            if ($validCandidates === []) {
                 break; // жодного придатного кандидата не залишилось — фіксуємо дефіцит
             }
+
+            $selected = $this->chooseCandidate($validCandidates, $workloadHours, $shiftCounts, $eventType);
+            /** @var User $candidate */
+            $candidate = $selected['user'];
+            /** @var ConstraintCheckResult $check */
+            $check = $selected['check'];
+
+            UserEvent::create([
+                'user_id' => $candidate->id,
+                'event_type_id' => $eventType->id,
+                'starts_at' => $startsAt,
+                'ends_at' => $endsAt,
+                'status' => 'draft',
+                'has_rest_warning' => $check->status === ConstraintCheckResult::STATUS_WARNING,
+                'warning_reason' => $check->reason,
+                'note' => 'Автогенерація графіка',
+            ]);
+
+            if ($eventType->is_work_time) {
+                $workloadHours[$candidate->id] = ($workloadHours[$candidate->id] ?? 0) + $eventType->default_duration_hours;
+            }
+            $shiftCounts[$candidate->id][$eventType->id] = ($shiftCounts[$candidate->id][$eventType->id] ?? 0) + 1;
+            $assignedTodayThisType->put($candidate->id, true);
+            $assignedUsersToday->put($candidate->id, true);
+
+            $result->addCreated(
+                $day->format('d.m.Y'),
+                $eventType->name,
+                $candidate->name,
+                $check->status
+            );
+
+            $needed--;
+            $filled++;
         }
 
         if ($needed > 0) {
@@ -186,6 +209,80 @@ class AutoScheduler
                 'Немає допущених співробітників, які проходять перевірку обмежень (допуск / відпочинок / ексклюзивність) для цього дня.'
             );
         }
+    }
+
+    /**
+     * Averages applicable pair scores for the other employees already assigned
+     * to this date and event type. An empty event-type list means all types.
+     */
+    protected function synergyScore(User $candidate, Collection $assignedUsers, EventType $eventType, Collection $synergies): float
+    {
+        $scores = [];
+
+        foreach ($assignedUsers->keys() as $assignedUserId) {
+            if ((int) $assignedUserId === (int) $candidate->id) {
+                continue;
+            }
+
+            $synergy = $synergies->get($this->synergyPairKey($candidate->id, (int) $assignedUserId));
+            if (! $synergy) {
+                continue;
+            }
+
+            $eventTypeIds = $synergy->eventTypes->pluck('id');
+            if ($eventTypeIds->isNotEmpty() && ! $eventTypeIds->contains($eventType->id)) {
+                continue;
+            }
+
+            $scores[] = $synergy->score;
+        }
+
+        return $scores === [] ? 0 : array_sum($scores) / count($scores);
+    }
+
+    /**
+     * Draws a weighted random candidate: higher synergy can receive up to 100
+     * times the weight, while workload and shift counts still favor fairness.
+     */
+    protected function chooseCandidate(array $candidates, array $workloadHours, array $shiftCounts, EventType $eventType): array
+    {
+        $scores = array_column($candidates, 'synergy');
+        $minScore = min($scores);
+        $maxScore = max($scores);
+        $minWorkload = min(array_map(fn (array $item): int => $workloadHours[$item['user']->id] ?? 0, $candidates));
+        $minShiftCount = min(array_map(fn (array $item): int => $shiftCounts[$item['user']->id][$eventType->id] ?? 0, $candidates));
+        $weightedCandidates = [];
+        $totalWeight = 0;
+
+        foreach ($candidates as $candidate) {
+            $synergyLevel = $maxScore === $minScore
+                ? 0
+                : ($candidate['synergy'] - $minScore) / ($maxScore - $minScore);
+            $synergyWeight = (int) round(1000 * (100 ** $synergyLevel));
+            $workloadDifference = ($workloadHours[$candidate['user']->id] ?? 0) - $minWorkload;
+            $shiftDifference = ($shiftCounts[$candidate['user']->id][$eventType->id] ?? 0) - $minShiftCount;
+            $fairnessFactor = 1 + ($workloadDifference / max(1, $eventType->default_duration_hours)) + $shiftDifference;
+            $weight = max(1, (int) round($synergyWeight / $fairnessFactor));
+
+            $weightedCandidates[] = ['candidate' => $candidate, 'weight' => $weight];
+            $totalWeight += $weight;
+        }
+
+        $draw = random_int(1, $totalWeight);
+
+        foreach ($weightedCandidates as $weightedCandidate) {
+            $draw -= $weightedCandidate['weight'];
+            if ($draw <= 0) {
+                return $weightedCandidate['candidate'];
+            }
+        }
+
+        return $weightedCandidates[array_key_last($weightedCandidates)]['candidate'];
+    }
+
+    protected function synergyPairKey(int $userId, int $otherUserId): string
+    {
+        return min($userId, $otherUserId).':'.max($userId, $otherUserId);
     }
 
     /**

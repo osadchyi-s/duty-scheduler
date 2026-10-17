@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\EventType;
+use App\Models\Synergy;
 use App\Models\User;
 use App\Models\UserEvent;
 use App\Services\AutoScheduler;
@@ -83,6 +84,63 @@ it('records a deficit when no eligible user passes the constraints', function ()
 
     expect($result->createdCount())->toBe(1)
         ->and($result->deficitCount())->toBe(1);
+});
+
+it('favors employees with stronger applicable synergy to someone already assigned that day', function () {
+    $this->dutyType->update([
+        'min_rest_hours' => 0,
+        'preferred_rest_hours' => 0,
+        'is_work_time' => false,
+    ]);
+
+    $seedType = EventType::create([
+        'name' => 'Ранкова зміна', 'code' => 'morning_seed', 'color_code' => '#000000',
+        'is_blocking' => false, 'min_capacity' => 0, 'max_capacity' => 1,
+        'min_rest_hours' => 0, 'preferred_rest_hours' => 0,
+        'default_start_time' => '06:00:00', 'default_duration_hours' => 1,
+        'is_schedulable' => true, 'is_work_time' => false, 'is_active' => true,
+    ]);
+
+    $preferred = $this->users[0];
+    $lessCompatible = $this->users[1];
+    $alreadyAssigned = $this->users[2];
+    $alreadyAssigned->allowedEventTypes()->attach($seedType->id);
+    $alreadyAssigned->allowedEventTypes()->detach($this->dutyType->id);
+
+    $preferredSynergy = Synergy::create([
+        'user_a_id' => $alreadyAssigned->id,
+        'user_b_id' => $preferred->id,
+        'score' => 10,
+    ]);
+    $preferredSynergy->eventTypes()->attach($this->dutyType->id);
+
+    Synergy::create([
+        'user_a_id' => $lessCompatible->id,
+        'user_b_id' => $alreadyAssigned->id,
+        'score' => -10,
+    ])->eventTypes()->attach($this->dutyType->id);
+
+    $from = Carbon::parse('2026-09-01');
+    $to = Carbon::parse('2026-09-30');
+
+    for ($day = $from->copy(); $day->lte($to); $day->addDay()) {
+        UserEvent::create([
+            'user_id' => $alreadyAssigned->id,
+            'event_type_id' => $seedType->id,
+            'starts_at' => $day->copy()->setTime(6, 0),
+            'ends_at' => $day->copy()->setTime(7, 0),
+            'status' => 'approved',
+        ]);
+    }
+
+    $this->scheduler->generate($from, $to, [$seedType->id, $this->dutyType->id]);
+
+    $assignments = UserEvent::where('event_type_id', $this->dutyType->id)
+        ->get()
+        ->groupBy('user_id')
+        ->map->count();
+
+    expect($assignments->get($preferred->id, 0))->toBeGreaterThan($assignments->get($lessCompatible->id, 0));
 });
 
 it('skips event types without a configured duration', function () {

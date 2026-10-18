@@ -216,7 +216,7 @@ class AutoScheduler
                 'status' => 'draft',
                 'has_rest_warning' => $check->status === ConstraintCheckResult::STATUS_WARNING,
                 'warning_reason' => $check->reason,
-                'note' => 'Автогенерація графіка',
+                'note' => 'system:auto-generated',
             ]);
 
             if ($eventType->is_work_time) {
@@ -243,7 +243,7 @@ class AutoScheduler
                 $eventType->name,
                 $target,
                 $existingCount + $filled,
-                'Немає допущених співробітників, які проходять перевірку обмежень (допуск / відпочинок / ексклюзивність) для цього дня.'
+                __('No eligible employees pass the constraints (permission / rest / exclusivity) for this day.')
             );
         }
     }

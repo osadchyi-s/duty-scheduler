@@ -33,12 +33,12 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
     {
         $rows = [];
 
-        $header = ['Співробітник'];
+        $header = [__('Employee')];
         for ($d = $this->monthStart->copy(); $d->lte($this->monthEnd); $d->addDay()) {
             $header[] = $d->format('d.m');
         }
-        $header[] = 'Всього годин';
-        $header[] = 'Змін';
+        $header[] = __('Total hours');
+        $header[] = __('Shifts');
         $rows[] = $header;
 
         $employees = User::whereHas('roles', fn ($q) => $q->whereIn('name', ['User', 'Manager', 'Admin']))

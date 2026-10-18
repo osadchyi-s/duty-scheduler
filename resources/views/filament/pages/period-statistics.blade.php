@@ -1,31 +1,31 @@
 <x-filament-panels::page>
     <form wire:submit.prevent="$refresh" class="flex items-end gap-4 mb-6">
         {{ $this->form }}
-        <x-filament::button type="submit">Оновити звіт</x-filament::button>
+        <x-filament::button type="submit">{{ __('Refresh report') }}</x-filament::button>
     </form>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div class="rounded-xl border p-4 bg-white dark:bg-gray-900">
-            <div class="text-xs text-gray-400">Всього призначень за період</div>
+            <div class="text-xs text-gray-400">{{ __('Total assignments in period') }}</div>
             <div class="text-2xl font-bold">{{ $this->exceptionRate['total'] }}</div>
         </div>
         <div class="rounded-xl border p-4 bg-white dark:bg-gray-900">
-            <div class="text-xs text-gray-400">З порушенням бажаного відпочинку</div>
+            <div class="text-xs text-gray-400">{{ __('With preferred rest violations') }}</div>
             <div class="text-2xl font-bold text-amber-600">{{ $this->exceptionRate['with_warning'] }}</div>
         </div>
         <div class="rounded-xl border p-4 bg-white dark:bg-gray-900">
-            <div class="text-xs text-gray-400">Коефіцієнт використання винятків</div>
+            <div class="text-xs text-gray-400">{{ __('Exception rate') }}</div>
             <div class="text-2xl font-bold text-amber-600">{{ $this->exceptionRate['rate'] }}%</div>
         </div>
     </div>
 
     <div class="rounded-xl border bg-white dark:bg-gray-900 p-4 mb-6">
-        <h3 class="font-semibold mb-3">Розподіл навантаження за типами подій</h3>
+        <h3 class="font-semibold mb-3">{{ __('Workload by event type') }}</h3>
         <table class="w-full text-sm">
             <thead>
                 <tr class="text-left text-gray-400">
-                    <th class="py-1">Співробітник</th>
-                    <th class="py-1">Типи подій (к-сть)</th>
+                    <th class="py-1">{{ __('Employee') }}</th>
+                    <th class="py-1">{{ __('Event types (count)') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -44,14 +44,14 @@
     </div>
 
     <div class="rounded-xl border bg-white dark:bg-gray-900 p-4">
-        <h3 class="font-semibold mb-3">Кадровий дефіцит (нижче min_capacity)</h3>
+        <h3 class="font-semibold mb-3">{{ __('Staffing deficit (below minimum capacity)') }}</h3>
         @if(count($this->deficitDates))
             <table class="w-full text-sm">
                 <thead>
                     <tr class="text-left text-gray-400">
-                        <th class="py-1">Дата</th>
-                        <th class="py-1">Тип події</th>
-                        <th class="py-1">Призначено / Потрібно</th>
+                        <th class="py-1">{{ __('Date') }}</th>
+                        <th class="py-1">{{ __('Event type') }}</th>
+                        <th class="py-1">{{ __('Assigned / Required') }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -65,7 +65,7 @@
                 </tbody>
             </table>
         @else
-            <p class="text-gray-400 text-sm">Дефіциту не виявлено за обраний період.</p>
+            <p class="text-gray-400 text-sm">{{ __('No staffing deficits found for the selected period.') }}</p>
         @endif
     </div>
 </x-filament-panels::page>

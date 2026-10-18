@@ -21,10 +21,6 @@ class PeriodStatistics extends Page implements HasForms
 
     protected static ?string $navigationIcon = 'heroicon-o-chart-bar';
 
-    protected static ?string $navigationLabel = 'Звіти та статистика';
-
-    protected static ?string $title = 'Аналітика за період';
-
     protected static string $view = 'filament.pages.period-statistics';
 
     protected static ?int $navigationSort = 2;
@@ -33,6 +29,16 @@ class PeriodStatistics extends Page implements HasForms
         'from' => null,
         'to' => null,
     ];
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Reports and statistics');
+    }
+
+    public function getTitle(): string
+    {
+        return __('Period analytics');
+    }
 
     public function mount(): void
     {
@@ -45,8 +51,8 @@ class PeriodStatistics extends Page implements HasForms
     protected function getFormSchema(): array
     {
         return [
-            Forms\Components\DatePicker::make('from')->label('Від'),
-            Forms\Components\DatePicker::make('to')->label('До'),
+            Forms\Components\DatePicker::make('from')->label(__('From')),
+            Forms\Components\DatePicker::make('to')->label(__('To')),
         ];
     }
 

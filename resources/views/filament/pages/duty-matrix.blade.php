@@ -51,6 +51,11 @@
                     {{ $type->name }}
                 </span>
             @endforeach
+            <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700">
+                <span class="w-3 h-3 rounded-sm border border-dashed border-gray-500 inline-block"
+                      style="background-image: repeating-linear-gradient(135deg, rgba(100,100,100,.5) 0 2px, transparent 2px 4px)"></span>
+                Чернетка (D)
+            </span>
         </div>
 
         {{-- Матриця --}}
@@ -133,16 +138,20 @@
                                                     : ($event->note
                                                         ? 'Примітка: ' . $event->note
                                                         : $event->eventType->name . ' (' . $event->starts_at->format('H:i') . '–' . $event->ends_at->format('H:i') . ')');
-                                            @endphp
+                                                    $eventTitle = ($event->status === 'draft' ? 'Чернетка — ' : 'Затверджено — ') . $eventTitle;
+                                                @endphp
                                             <button type="button"
                                                 wire:click="mountAction('assign', { userId: {{ $employee->id }}, date: '{{ $dateKey }}', eventId: {{ $event->id }} })"
                                                 @mouseenter="setRest({{ $employee->id }}, '{{ $minUntil }}', '{{ $prefUntil }}')"
                                                 @mouseleave="clearRest()"
-                                                class="w-full rounded px-1 py-1 text-white text-[10px] leading-tight relative"
-                                                style="background-color: {{ $event->eventType->color_code }}"
+                                                class="w-full rounded px-1 py-1 text-white text-[10px] leading-tight relative {{ $event->status === 'draft' ? 'border border-dashed border-white/80' : '' }}"
+                                                style="background-color: {{ $event->eventType->color_code }}; {{ $event->status === 'draft' ? 'background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.35) 0 3px, transparent 3px 7px);' : '' }}"
                                                 title="{{ $eventTitle }}"
                                             >
                                                 {{ \Illuminate\Support\Str::limit($event->eventType->name, 6, '') }}
+                                                @if($event->status === 'draft')
+                                                    <span class="absolute bottom-0 right-0 rounded-tl bg-black/30 px-0.5 text-[8px] leading-none">D</span>
+                                                @endif
                                                 @if($showHighlights['warnings'] && $event->has_rest_warning)
                                                     <span class="absolute -top-1 -right-1">⚠️</span>
                                                 @endif

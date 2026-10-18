@@ -96,6 +96,18 @@ class ConstraintsEngine
             );
         }
 
+        if ($eventType->is_work_time) {
+            $overlappingWorkEvent = $overlapping->first(
+                fn (UserEvent $event): bool => $event->eventType->is_work_time
+            );
+
+            if ($overlappingWorkEvent) {
+                return ConstraintCheckResult::forbidden(
+                    "Чергування «{$eventType->name}» перекривається з робочою подією «{$overlappingWorkEvent->eventType->name}» ({$overlappingWorkEvent->starts_at->format('d.m H:i')}–{$overlappingWorkEvent->ends_at->format('d.m H:i')})."
+                );
+            }
+        }
+
         return null;
     }
 

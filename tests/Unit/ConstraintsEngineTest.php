@@ -88,3 +88,30 @@ it('blocks any assignment overlapping a blocking event like vacation', function 
 
     expect($result->isAllowed)->toBeFalse();
 });
+
+it('forbids overlapping work events even when neither event type is blocking', function () {
+    $dayDuty = EventType::create([
+        'name' => 'Денне чергування', 'code' => 'day_duty', 'color_code' => '#22C55E',
+        'is_blocking' => false, 'min_capacity' => 1, 'max_capacity' => 1,
+        'min_rest_hours' => 0, 'preferred_rest_hours' => 0, 'is_work_time' => true,
+    ]);
+    $this->user->allowedEventTypes()->attach($dayDuty->id);
+
+    UserEvent::create([
+        'user_id' => $this->user->id,
+        'event_type_id' => $this->dutyType->id,
+        'starts_at' => Carbon::parse('2026-12-08 08:00'),
+        'ends_at' => Carbon::parse('2026-12-09 08:00'),
+        'status' => 'draft',
+    ]);
+
+    $result = $this->engine->validate(
+        $this->user,
+        $dayDuty,
+        Carbon::parse('2026-12-08 09:00'),
+        Carbon::parse('2026-12-08 17:00'),
+    );
+
+    expect($result->isAllowed)->toBeFalse()
+        ->and($result->reason)->toContain('перекривається з робочою подією');
+});

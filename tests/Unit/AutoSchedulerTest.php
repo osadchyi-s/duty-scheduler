@@ -86,6 +86,104 @@ it('records a deficit when no eligible user passes the constraints', function ()
         ->and($result->deficitCount())->toBe(1);
 });
 
+it('does not assign one employee overlapping shifts of different event types', function () {
+    $dayType = EventType::create([
+        'name' => 'Денне чергування', 'code' => 'day_duty', 'color_code' => '#22C55E',
+        'is_blocking' => false, 'min_capacity' => 1, 'max_capacity' => 1,
+        'min_rest_hours' => 0, 'preferred_rest_hours' => 0,
+        'default_start_time' => '09:00:00', 'default_duration_hours' => 8,
+        'is_schedulable' => true, 'is_work_time' => true, 'is_active' => true,
+    ]);
+
+    foreach ($this->users as $user) {
+        $user->allowedEventTypes()->detach();
+    }
+
+    $onlyAvailableUser = User::create([
+        'name' => 'Єдиний доступний', 'email' => 'only-available@test.local',
+        'password' => bcrypt('secret'), 'is_active' => true,
+    ]);
+    $onlyAvailableUser->assignRole('User');
+    $onlyAvailableUser->allowedEventTypes()->attach([$this->dutyType->id, $dayType->id]);
+
+    $result = $this->scheduler->generate(
+        Carbon::parse('2026-12-08'),
+        Carbon::parse('2026-12-08')->endOfDay(),
+        [$this->dutyType->id, $dayType->id],
+    );
+
+    $events = UserEvent::whereIn('event_type_id', [$this->dutyType->id, $dayType->id])->get();
+
+    expect($events)->toHaveCount(1)
+        ->and($events->first()->user_id)->toBe($onlyAvailableUser->id)
+        ->and($result->createdCount())->toBe(1)
+        ->and($result->deficitCount())->toBe(1);
+});
+
+it('deletes only selected draft assignments when replacing drafts', function () {
+    $approved = UserEvent::create([
+        'user_id' => $this->users[0]->id,
+        'event_type_id' => $this->dutyType->id,
+        'starts_at' => Carbon::parse('2026-12-08 08:00'),
+        'ends_at' => Carbon::parse('2026-12-09 08:00'),
+        'status' => 'approved',
+    ]);
+    $draft = UserEvent::create([
+        'user_id' => $this->users[1]->id,
+        'event_type_id' => $this->dutyType->id,
+        'starts_at' => Carbon::parse('2026-12-08 08:00'),
+        'ends_at' => Carbon::parse('2026-12-09 08:00'),
+        'status' => 'draft',
+    ]);
+
+    $result = $this->scheduler->generate(
+        Carbon::parse('2026-12-08'),
+        Carbon::parse('2026-12-08')->endOfDay(),
+        [$this->dutyType->id],
+        existingEvents: AutoScheduler::EXISTING_DELETE_DRAFTS,
+    );
+
+    expect(UserEvent::find($approved->id))->not->toBeNull()
+        ->and(UserEvent::find($draft->id))->toBeNull()
+        ->and($result->deletedCount)->toBe(1);
+});
+
+it('deletes approved and draft assignments for selected event types when replacing all', function () {
+    $approved = UserEvent::create([
+        'user_id' => $this->users[0]->id,
+        'event_type_id' => $this->dutyType->id,
+        'starts_at' => Carbon::parse('2026-12-08 08:00'),
+        'ends_at' => Carbon::parse('2026-12-09 08:00'),
+        'status' => 'approved',
+    ]);
+    $draft = UserEvent::create([
+        'user_id' => $this->users[1]->id,
+        'event_type_id' => $this->dutyType->id,
+        'starts_at' => Carbon::parse('2026-12-08 08:00'),
+        'ends_at' => Carbon::parse('2026-12-09 08:00'),
+        'status' => 'draft',
+    ]);
+    $cancelled = UserEvent::create([
+        'user_id' => $this->users[2]->id,
+        'event_type_id' => $this->dutyType->id,
+        'starts_at' => Carbon::parse('2026-12-08 08:00'),
+        'ends_at' => Carbon::parse('2026-12-09 08:00'),
+        'status' => 'cancelled',
+    ]);
+
+    $result = $this->scheduler->generate(
+        Carbon::parse('2026-12-08'),
+        Carbon::parse('2026-12-08')->endOfDay(),
+        [$this->dutyType->id],
+        existingEvents: AutoScheduler::EXISTING_DELETE_ALL,
+    );
+
+    expect(UserEvent::find($approved->id))->toBeNull()
+        ->and(UserEvent::find($draft->id))->toBeNull()
+        ->and(UserEvent::find($cancelled->id))->not->toBeNull()
+        ->and($result->deletedCount)->toBe(2);
+});
+
 it('favors employees with stronger applicable synergy to someone already assigned that day', function () {
     $this->dutyType->update([
         'min_rest_hours' => 0,

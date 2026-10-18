@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\EventType;
 use App\Models\User;
 use App\Models\UserEvent;
+use App\Services\AutoScheduler;
 use App\Services\ConstraintCheckResult;
 use App\Services\ConstraintsEngine;
 use Carbon\Carbon;
@@ -59,7 +60,31 @@ class DutyMatrix extends Page implements HasForms, HasActions
                 ->label('Автогенерація графіка')
                 ->icon('heroicon-o-sparkles')
                 ->color('gray')
-                ->url(fn () => \App\Filament\Pages\AutoSchedule::getUrl()),
+                ->visible(fn () => auth()->user()?->hasRole(['Admin', 'Manager']) ?? false)
+                ->form(AutoSchedule::formSchema())
+                ->fillForm(fn () => AutoSchedule::defaultFormData($this->month))
+                ->requiresConfirmation()
+                ->modalHeading('Автогенерація графіка')
+                ->modalDescription('Створює чернетки. Режим перепризначення може видалити наявні події вибраних типів у періоді.')
+                ->modalSubmitActionLabel('Згенерувати графік')
+                ->action(function (array $data, AutoScheduler $scheduler): void {
+                    $result = AutoSchedule::generateResult($data, $scheduler);
+                    AutoSchedule::sendResultNotification($result);
+                    $this->flushMatrixCachesForRange(
+                        Carbon::parse($data['from'])->startOfDay(),
+                        Carbon::parse($data['to'])->endOfDay(),
+                    );
+                }),
+            Action::make('approve_month')
+                ->label('Затвердити чернетки місяця')
+                ->icon('heroicon-o-check-circle')
+                ->color('success')
+                ->visible(fn () => auth()->user()?->hasRole(['Admin', 'Manager']) ?? false)
+                ->requiresConfirmation()
+                ->modalHeading('Затвердити всі чернетки за місяць?')
+                ->modalDescription('Усі чернетки, що відображаються в поточному місяці, буде переведено у статус «Затверджено».')
+                ->modalSubmitActionLabel('Затвердити')
+                ->action(fn () => $this->approveCurrentMonthDrafts()),
             Action::make('clear_month')
                 ->label('Очистити місяць')
                 ->icon('heroicon-o-trash')
@@ -228,6 +253,17 @@ class DutyMatrix extends Page implements HasForms, HasActions
                     ->label('Примітка')
                     ->rows(2),
                 Forms\Components\Actions::make([
+                    Forms\Components\Actions\Action::make('approve_event')
+                        ->label('Затвердити чернетку')
+                        ->color('success')
+                        ->icon('heroicon-o-check-circle')
+                        ->visible(fn (Forms\Get $get): bool => filled($get('event_id'))
+                            && UserEvent::whereKey($get('event_id'))->where('status', 'draft')->exists()
+                            && (auth()->user()?->hasRole(['Admin', 'Manager']) ?? false))
+                        ->requiresConfirmation()
+                        ->action(function (Forms\Get $get): void {
+                            $this->approveEvent((int) $get('event_id'));
+                        }),
                     Forms\Components\Actions\Action::make('delete_event')
                         ->label('Видалити')
                         ->color('danger')
@@ -392,6 +428,42 @@ class DutyMatrix extends Page implements HasForms, HasActions
         $event->delete();
 
         Notification::make()->title('Подію видалено')->success()->send();
+    }
+
+    public function approveEvent(int $eventId): void
+    {
+        abort_unless(auth()->user()?->hasRole(['Admin', 'Manager']), 403);
+
+        $event = UserEvent::findOrFail($eventId);
+        if ($event->status !== 'draft') {
+            Notification::make()->title('Подія вже не є чернеткою')->warning()->send();
+
+            return;
+        }
+
+        $event->update(['status' => 'approved']);
+        $this->flushMatrixCachesForRange($event->starts_at, $event->ends_at);
+
+        Notification::make()->title('Чернетку затверджено')->success()->send();
+    }
+
+    public function approveCurrentMonthDrafts(): void
+    {
+        abort_unless(auth()->user()?->hasRole(['Admin', 'Manager']), 403);
+
+        [$start, $end] = $this->periodBounds();
+        $approved = UserEvent::query()
+            ->where('status', 'draft')
+            ->overlappingPeriod($start, $end)
+            ->update(['status' => 'approved', 'updated_at' => now()]);
+
+        $this->flushMatrixCachesForRange($start, $end);
+
+        Notification::make()
+            ->title('Чернетки місяця затверджено')
+            ->body("Затверджено подій: {$approved}.")
+            ->success()
+            ->send();
     }
 
     public function clearCurrentMonth(): void

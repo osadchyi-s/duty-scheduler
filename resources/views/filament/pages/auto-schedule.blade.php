@@ -1,6 +1,9 @@
 <x-filament-panels::page>
     <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 mb-6">
-        <form wire:submit.prevent="generate">
+        <form
+            wire:submit.prevent="generate"
+            wire:confirm="Запустити автогенерацію? Якщо вибрано режим видалення, попередні призначення буде видалено без можливості відновлення."
+        >
             {{ $this->form }}
 
             <div class="mt-4">
@@ -29,6 +32,11 @@
                 <div class="text-2xl font-bold text-red-600">{{ $result['deficitCount'] }}</div>
             </div>
         </div>
+        @if($result['deletedCount'] > 0)
+            <div class="rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 p-4 mb-6 text-sm text-amber-800 dark:text-amber-200">
+                Видалено попередніх призначень: {{ $result['deletedCount'] }}.
+            </div>
+        @endif
 
         @if(count($result['deficits']))
             <div class="rounded-xl border bg-white dark:bg-gray-900 p-4 mb-6">
@@ -88,8 +96,7 @@
                     </table>
                 </div>
                 <div class="mt-3 text-xs text-gray-400">
-                    Перегляньте та затвердіть результат у
-                    <a href="{{ \App\Filament\Pages\DutyMatrix::getUrl() }}" class="text-primary-600 underline">Матриці чергувань</a>.
+                    Чернетки можна затвердити окремо або всі разом у Матриці чергувань.
                 </div>
             </div>
         @endif

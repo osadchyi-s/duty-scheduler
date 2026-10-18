@@ -11,6 +11,7 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Автоматичний розподіл чергувань наперед на заданий період (за замовчуванням — місяць).
@@ -45,19 +46,26 @@ class AutoSchedule extends Page implements HasForms
 
     public function mount(): void
     {
-        $this->form->fill([
-            'from' => now()->startOfMonth()->format('Y-m-d'),
-            'to' => now()->endOfMonth()->format('Y-m-d'),
-            // За замовчуванням обрані типи, де мінімальна кількість людей на день > 0.
+        $this->form->fill(self::defaultFormData());
+    }
+
+    public static function defaultFormData(?string $month = null): array
+    {
+        $start = Carbon::createFromFormat('Y-m', $month ?? now()->format('Y-m'))->startOfMonth();
+
+        return [
+            'from' => $start->format('Y-m-d'),
+            'to' => $start->copy()->endOfMonth()->format('Y-m-d'),
             'event_type_ids' => EventType::where('min_capacity', '>', 0)
                 ->where('is_active', true)
                 ->pluck('id')
                 ->toArray(),
             'fill_to_max' => false,
-        ]);
+            'existing_events' => AutoScheduler::EXISTING_FILL_MISSING,
+        ];
     }
 
-    protected function getFormSchema(): array
+    public static function formSchema(): array
     {
         return [
             Forms\Components\Section::make('Період')
@@ -89,6 +97,21 @@ class AutoSchedule extends Page implements HasForms
 
             Forms\Components\Section::make('Стратегія')
                 ->schema([
+                    Forms\Components\Radio::make('existing_events')
+                        ->label('Що робити з уже призначеними подіями вибраних типів у періоді')
+                        ->options([
+                            AutoScheduler::EXISTING_FILL_MISSING => 'Лише заповнити відсутні призначення',
+                            AutoScheduler::EXISTING_DELETE_DRAFTS => 'Видалити лише чернетки та перепризначити',
+                            AutoScheduler::EXISTING_DELETE_ALL => 'Видалити всі призначення та перепризначити',
+                        ])
+                        ->descriptions([
+                            AutoScheduler::EXISTING_FILL_MISSING => 'Зберегти наявні події та заповнити незаповнені місця до обраної місткості.',
+                            AutoScheduler::EXISTING_DELETE_DRAFTS => 'Видаляються лише чернетки вибраних типів. Затверджені події залишаються.',
+                            AutoScheduler::EXISTING_DELETE_ALL => 'Видаляються чернетки й затверджені події вибраних типів. Скасовані події не змінюються.',
+                        ])
+                        ->default(AutoScheduler::EXISTING_FILL_MISSING)
+                        ->helperText('Увага: режими видалення видаляють події вибраних типів, що перетинаються з періодом, без можливості відновлення.')
+                        ->required(),
                     Forms\Components\Toggle::make('fill_to_max')
                         ->label('Заповнювати до максимальної місткості (max_capacity)')
                         ->helperText('Вимкнено = заповнювати лише до мінімально обов’язкової кількості (min_capacity)')
@@ -100,36 +123,49 @@ class AutoSchedule extends Page implements HasForms
     public function form(Form $form): Form
     {
         return $form
-            ->schema($this->getFormSchema())
+            ->schema(self::formSchema())
             ->statePath('data');
     }
 
     public function generate(AutoScheduler $scheduler): void
     {
-        $data = $this->form->getState();
+        $this->result = self::generateResult($this->form->getState(), $scheduler);
+        self::sendResultNotification($this->result);
+    }
 
+    public static function generateResult(array $data, AutoScheduler $scheduler): array
+    {
         if (empty($data['event_type_ids'])) {
-            Notification::make()->title('Оберіть хоча б один тип події')->danger()->send();
-
-            return;
+            throw ValidationException::withMessages(['event_type_ids' => 'Оберіть хоча б один тип події.']);
         }
 
         $from = Carbon::parse($data['from'])->startOfDay();
         $to = Carbon::parse($data['to'])->endOfDay();
 
         if ($from->diffInDays($to) > 366) {
-            Notification::make()->title('Період занадто великий (макс. 366 днів)')->danger()->send();
-
-            return;
+            throw ValidationException::withMessages(['to' => 'Період не може перевищувати 366 днів.']);
         }
 
-        $scheduleResult = $scheduler->generate($from, $to, $data['event_type_ids'], (bool) $data['fill_to_max']);
-        $this->result = $scheduleResult->toArray();
+        return $scheduler->generate(
+            $from,
+            $to,
+            array_map('intval', $data['event_type_ids']),
+            (bool) ($data['fill_to_max'] ?? false),
+            $data['existing_events'] ?? AutoScheduler::EXISTING_FILL_MISSING,
+        )->toArray();
+    }
 
-        if ($this->result['createdCount'] === 0 && $this->result['deficitCount'] === 0) {
+    public static function sendResultNotification(array $result): void
+    {
+        $details = "Створено призначень: {$result['createdCount']} (з попередженням: {$result['warningCount']}). Незаповнених слотів: {$result['deficitCount']}.";
+        if ($result['deletedCount'] > 0) {
+            $details .= " Видалено попередніх призначень: {$result['deletedCount']}.";
+        }
+
+        if ($result['createdCount'] === 0 && $result['deficitCount'] === 0 && $result['deletedCount'] === 0) {
             Notification::make()
-                ->title('Нічого не створено')
-                ->body('Усі обрані слоти вже заповнені на цей період, або жоден тип події не має вказаної тривалості зміни.')
+                ->title('Нічого не змінено')
+                ->body('Обрані слоти вже заповнені або типам подій не вказано тривалість.')
                 ->warning()
                 ->send();
 
@@ -138,7 +174,7 @@ class AutoSchedule extends Page implements HasForms
 
         Notification::make()
             ->title('Автогенерація завершена')
-            ->body("Створено призначень: {$this->result['createdCount']} (з попередженням: {$this->result['warningCount']}). Незаповнених слотів: {$this->result['deficitCount']}.")
+            ->body($details)
             ->success()
             ->send();
     }

@@ -25,6 +25,12 @@ use Illuminate\Support\Facades\DB;
  */
 class AutoScheduler
 {
+    public const EXISTING_FILL_MISSING = 'fill_missing';
+
+    public const EXISTING_DELETE_DRAFTS = 'delete_drafts';
+
+    public const EXISTING_DELETE_ALL = 'delete_all';
+
     public function __construct(protected ConstraintsEngine $engine)
     {
     }
@@ -32,8 +38,21 @@ class AutoScheduler
     /**
      * @param  Collection<int, EventType>|array<int>  $eventTypeIds
      */
-    public function generate(Carbon $from, Carbon $to, array $eventTypeIds, bool $fillToMax = false): AutoScheduleResult
-    {
+    public function generate(
+        Carbon $from,
+        Carbon $to,
+        array $eventTypeIds,
+        bool $fillToMax = false,
+        string $existingEvents = self::EXISTING_FILL_MISSING,
+    ): AutoScheduleResult {
+        if (! in_array($existingEvents, [
+            self::EXISTING_FILL_MISSING,
+            self::EXISTING_DELETE_DRAFTS,
+            self::EXISTING_DELETE_ALL,
+        ], true)) {
+            throw new \InvalidArgumentException('Unknown existing event handling mode.');
+        }
+
         $result = new AutoScheduleResult;
 
         $eventTypes = EventType::whereIn('id', $eventTypeIds)
@@ -50,14 +69,32 @@ class AutoScheduler
             ->with('allowedEventTypes:id')
             ->get();
 
-        // Базове навантаження — сума годин наявних робочих подій за весь період (для справедливого старту).
-        $workloadHours = $this->initialWorkload($activeUsers, $from, $to);
+        $workloadHours = [];
         $shiftCounts = []; // [user_id][event_type_id] => к-сть змін, призначених у цьому запуску
         $synergies = Synergy::with('eventTypes:id')->get()->keyBy(
             fn (Synergy $synergy): string => $this->synergyPairKey($synergy->user_a_id, $synergy->user_b_id)
         );
 
-        DB::transaction(function () use ($eventTypes, $activeUsers, $from, $to, $fillToMax, &$workloadHours, &$shiftCounts, $synergies, $result) {
+        $result->deletedCount = DB::transaction(function () use ($eventTypes, $activeUsers, $from, $to, $fillToMax, $existingEvents, &$workloadHours, &$shiftCounts, $synergies, $result): int {
+            $deletedCount = 0;
+
+            if ($existingEvents !== self::EXISTING_FILL_MISSING) {
+                $existingQuery = UserEvent::query()
+                    ->whereIn('event_type_id', $eventTypes->pluck('id'))
+                    ->where('status', '!=', 'cancelled')
+                    ->overlappingPeriod($from, $to);
+
+                if ($existingEvents === self::EXISTING_DELETE_DRAFTS) {
+                    $existingQuery->where('status', 'draft');
+                }
+
+                $deletedCount = $existingQuery->delete();
+            }
+
+            // Calculate workload only after optional removal, so deleted shifts
+            // do not distort fairness for the assignments created in this run.
+            $workloadHours = $this->initialWorkload($activeUsers, $from, $to);
+
             for ($day = $from->copy()->startOfDay(); $day->lte($to); $day->addDay()) {
                 $assignedUsersToday = UserEvent::whereIn('event_type_id', $eventTypes->pluck('id'))
                     ->where('status', '!=', 'cancelled')
@@ -70,13 +107,13 @@ class AutoScheduler
                     $this->fillSlot($eventType, $day, $activeUsers, $fillToMax, $workloadHours, $shiftCounts, $synergies, $assignedUsersToday, $result, $to);
                 }
             }
+
+            return $deletedCount;
         });
 
-        Cache::forget('wfm:matrix:'.$from->format('Y-m'));
-        Cache::forget('wfm:coverage:'.$from->format('Y-m'));
-        if ($from->format('Y-m') !== $to->format('Y-m')) {
-            Cache::forget('wfm:matrix:'.$to->format('Y-m'));
-            Cache::forget('wfm:coverage:'.$to->format('Y-m'));
+        for ($month = $from->copy()->startOfMonth(); $month->lte($to); $month->addMonth()) {
+            Cache::forget('wfm:matrix:'.$month->format('Y-m'));
+            Cache::forget('wfm:coverage:'.$month->format('Y-m'));
         }
 
         return $result;

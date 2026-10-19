@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\EventType;
 use App\Models\User;
 use App\Models\UserEvent;
+use App\Services\AutoScheduler;
 use App\Services\ConstraintCheckResult;
 use App\Services\ConstraintsEngine;
 use Carbon\Carbon;
@@ -30,15 +31,35 @@ class DutyMatrix extends Page implements HasForms, HasActions
 
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
 
-    protected static ?string $navigationLabel = 'Матриця чергувань';
-
-    protected static ?string $title = 'Матриця чергувань';
-
     protected static string $view = 'filament.pages.duty-matrix';
 
     protected static ?int $navigationSort = 0;
 
     public string $month;
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Duty matrix');
+    }
+
+    public function getTitle(): string
+    {
+        return __('Duty matrix');
+    }
+
+    public function displayEventNote(?string $note): ?string
+    {
+        return in_array($note, ['system:auto-generated', 'Автогенерація графіка'], true)
+            ? __('Schedule auto-generation')
+            : $note;
+    }
+
+    protected function persistEventNote(?string $note): ?string
+    {
+        return in_array($note, ['system:auto-generated', 'Автогенерація графіка', 'Schedule auto-generation'], true)
+            ? 'system:auto-generated'
+            : $note;
+    }
 
     public array $showHighlights = [
         'rest_zones' => true,
@@ -56,23 +77,47 @@ class DutyMatrix extends Page implements HasForms, HasActions
     {
         return [
             Action::make('auto_schedule')
-                ->label('Автогенерація графіка')
+                ->label(__('Schedule auto-generation'))
                 ->icon('heroicon-o-sparkles')
                 ->color('gray')
-                ->url(fn () => \App\Filament\Pages\AutoSchedule::getUrl()),
+                ->visible(fn () => auth()->user()?->hasRole(['Admin', 'Manager']) ?? false)
+                ->form(AutoSchedule::formSchema())
+                ->fillForm(fn () => AutoSchedule::defaultFormData($this->month))
+                ->requiresConfirmation()
+                ->modalHeading(__('Schedule auto-generation'))
+                ->modalDescription(__('Creates drafts. Reassignment mode may delete existing events of the selected types in this period.'))
+                ->modalSubmitActionLabel(__('Generate schedule'))
+                ->action(function (array $data, AutoScheduler $scheduler): void {
+                    $result = AutoSchedule::generateResult($data, $scheduler);
+                    AutoSchedule::sendResultNotification($result);
+                    $this->flushMatrixCachesForRange(
+                        Carbon::parse($data['from'])->startOfDay(),
+                        Carbon::parse($data['to'])->endOfDay(),
+                    );
+                }),
+            Action::make('approve_month')
+                ->label(__('Approve month\'s drafts'))
+                ->icon('heroicon-o-check-circle')
+                ->color('success')
+                ->visible(fn () => auth()->user()?->hasRole(['Admin', 'Manager']) ?? false)
+                ->requiresConfirmation()
+                ->modalHeading(__('Approve all drafts for the month?'))
+                ->modalDescription(__('All drafts shown in the current month will be changed to “Approved”.'))
+                ->modalSubmitActionLabel(__('Approve'))
+                ->action(fn () => $this->approveCurrentMonthDrafts()),
             Action::make('clear_month')
-                ->label('Очистити місяць')
+                ->label(__('Clear month'))
                 ->icon('heroicon-o-trash')
                 ->color('danger')
                 ->visible(fn () => auth()->user()?->hasRole('Admin') ?? false)
                 ->requiresConfirmation()
-                ->modalHeading('Очистити поточний місяць?')
-                ->modalDescription('Ця дія видалить усі активні події поточного місяця. Це реально вплине на розклад і не є відміною. Продовжити?')
+                ->modalHeading(__('Clear the current month?'))
+                ->modalDescription(__('This permanently deletes all active events in the current month. This changes the schedule and cannot be undone. Continue?'))
                 ->action(function (): void {
                     $this->clearCurrentMonth();
                 }),
             Action::make('export')
-                ->label('Експорт в Excel')
+                ->label(__('Export to Excel'))
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('success')
                 ->action(fn () => \Maatwebsite\Excel\Facades\Excel::download(
@@ -180,18 +225,18 @@ class DutyMatrix extends Page implements HasForms, HasActions
     public function assignAction(): Action
     {
         return Action::make('assign')
-            ->label(fn (array $arguments) => ($arguments['eventId'] ?? null) ? 'Редагувати подію' : 'Призначити подію')
-            ->modalHeading(fn (array $arguments) => ($arguments['eventId'] ?? null) ? 'Редагувати подію' : 'Швидке призначення події')
+            ->label(fn (array $arguments) => ($arguments['eventId'] ?? null) ? __('Edit event') : __('Assign event'))
+            ->modalHeading(fn (array $arguments) => ($arguments['eventId'] ?? null) ? __('Edit event') : __('Quick event assignment'))
             ->form([
                 Forms\Components\Hidden::make('event_id')->dehydrated(),
                 Forms\Components\Select::make('user_id')
-                    ->label('Співробітник')
+                    ->label(__('Employee'))
                     ->options(fn () => User::query()->orderBy('name')->pluck('name', 'id'))
                     ->required()
                     ->disabled(fn (Forms\Get $get) => filled($get('user_id')))
                     ->dehydrated(),
                 Forms\Components\Select::make('event_type_id')
-                    ->label('Тип події')
+                    ->label(__('Event type'))
                     ->options(function (Forms\Get $get) {
                         $userId = $get('user_id');
                         $eventId = $get('event_id');
@@ -213,23 +258,34 @@ class DutyMatrix extends Page implements HasForms, HasActions
                         return $query->orderBy('sort_order')->pluck('name', 'id');
                     })
                     ->required()
-                    ->helperText('Показані лише типи, до яких співробітник має доступ.')
+                    ->helperText(__('Only event types available to this employee are shown.'))
                     ->live(),
                 Forms\Components\DateTimePicker::make('starts_at')
-                    ->label('Початок')
+                    ->label(__('Start'))
                     ->required()
                     ->seconds(false),
                 Forms\Components\DateTimePicker::make('ends_at')
-                    ->label('Закінчення')
+                    ->label(__('End'))
                     ->required()
                     ->seconds(false)
                     ->after('starts_at'),
                 Forms\Components\Textarea::make('note')
-                    ->label('Примітка')
+                    ->label(__('Note'))
                     ->rows(2),
                 Forms\Components\Actions::make([
+                    Forms\Components\Actions\Action::make('approve_event')
+                        ->label(__('Approve draft'))
+                        ->color('success')
+                        ->icon('heroicon-o-check-circle')
+                        ->visible(fn (Forms\Get $get): bool => filled($get('event_id'))
+                            && UserEvent::whereKey($get('event_id'))->where('status', 'draft')->exists()
+                            && (auth()->user()?->hasRole(['Admin', 'Manager']) ?? false))
+                        ->requiresConfirmation()
+                        ->action(function (Forms\Get $get): void {
+                            $this->approveEvent((int) $get('event_id'));
+                        }),
                     Forms\Components\Actions\Action::make('delete_event')
-                        ->label('Видалити')
+                        ->label(__('Delete'))
                         ->color('danger')
                         ->icon('heroicon-o-trash')
                         ->visible(fn (Forms\Get $get) => ! empty($get('event_id')))
@@ -258,7 +314,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
                     'event_type_id' => $event?->event_type_id ?? null,
                     'starts_at' => $startsAt->format('Y-m-d H:i:s'),
                     'ends_at' => $defaultEndsAt->format('Y-m-d H:i:s'),
-                    'note' => $event?->note ?? null,
+                    'note' => $this->displayEventNote($event?->note),
                 ];
             })
             ->action(function (array $data): void {
@@ -303,7 +359,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
 
         if (! $result->isAllowed) {
             Notification::make()
-                ->title('Призначення заборонено')
+                ->title(__('Assignment forbidden'))
                 ->body($result->reason)
                 ->danger()
                 ->send();
@@ -319,7 +375,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
             'status' => 'draft',
             'has_rest_warning' => $result->status === ConstraintCheckResult::STATUS_WARNING,
             'warning_reason' => $result->reason,
-            'note' => $data['note'] ?? null,
+            'note' => $this->persistEventNote($data['note'] ?? null),
             'created_by' => auth()->id(),
         ]);
 
@@ -327,12 +383,12 @@ class DutyMatrix extends Page implements HasForms, HasActions
 
         if ($result->status === ConstraintCheckResult::STATUS_WARNING) {
             Notification::make()
-                ->title('Подію створено з попередженням ⚠️')
+                ->title(__('Event created with a warning ⚠️'))
                 ->body($result->reason)
                 ->warning()
                 ->send();
         } else {
-            Notification::make()->title('Подію успішно призначено')->success()->send();
+            Notification::make()->title(__('Event assigned successfully'))->success()->send();
         }
     }
 
@@ -353,7 +409,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
 
         if (! $result->isAllowed) {
             Notification::make()
-                ->title('Редагування заборонено')
+                ->title(__('Editing forbidden'))
                 ->body($result->reason)
                 ->danger()
                 ->send();
@@ -371,14 +427,14 @@ class DutyMatrix extends Page implements HasForms, HasActions
             'ends_at' => $endsAt,
             'has_rest_warning' => $result->status === ConstraintCheckResult::STATUS_WARNING,
             'warning_reason' => $result->reason,
-            'note' => $data['note'] ?? null,
+            'note' => $this->persistEventNote($data['note'] ?? null),
         ]);
 
         $this->flushMatrixCachesForRange($oldStart, $oldEnd);
         $this->flushMatrixCachesForRange($startsAt, $endsAt);
 
         Notification::make()
-            ->title('Подію оновлено')
+            ->title(__('Event updated'))
             ->success()
             ->send();
     }
@@ -391,7 +447,43 @@ class DutyMatrix extends Page implements HasForms, HasActions
         $this->flushMatrixCachesForRange($event->starts_at, $event->ends_at);
         $event->delete();
 
-        Notification::make()->title('Подію видалено')->success()->send();
+        Notification::make()->title(__('Event deleted'))->success()->send();
+    }
+
+    public function approveEvent(int $eventId): void
+    {
+        abort_unless(auth()->user()?->hasRole(['Admin', 'Manager']), 403);
+
+        $event = UserEvent::findOrFail($eventId);
+        if ($event->status !== 'draft') {
+            Notification::make()->title(__('Event is no longer a draft'))->warning()->send();
+
+            return;
+        }
+
+        $event->update(['status' => 'approved']);
+        $this->flushMatrixCachesForRange($event->starts_at, $event->ends_at);
+
+        Notification::make()->title(__('Draft approved'))->success()->send();
+    }
+
+    public function approveCurrentMonthDrafts(): void
+    {
+        abort_unless(auth()->user()?->hasRole(['Admin', 'Manager']), 403);
+
+        [$start, $end] = $this->periodBounds();
+        $approved = UserEvent::query()
+            ->where('status', 'draft')
+            ->overlappingPeriod($start, $end)
+            ->update(['status' => 'approved', 'updated_at' => now()]);
+
+        $this->flushMatrixCachesForRange($start, $end);
+
+        Notification::make()
+            ->title(__('Monthly drafts approved'))
+            ->body(__('Events approved: :count.', ['count' => $approved]))
+            ->success()
+            ->send();
     }
 
     public function clearCurrentMonth(): void
@@ -409,8 +501,12 @@ class DutyMatrix extends Page implements HasForms, HasActions
         $this->flushMatrixCachesForRange($start, $end);
 
         Notification::make()
-            ->title('Місяць очищено')
-            ->body("Видалено {$deleted} активних подій за період {$start->format('d.m.Y')}–{$end->format('d.m.Y')}.")
+            ->title(__('Month cleared'))
+            ->body(__('Deleted :count active events for the period :from–:to.', [
+                'count' => $deleted,
+                'from' => $start->format('d.m.Y'),
+                'to' => $end->format('d.m.Y'),
+            ]))
             ->success()
             ->send();
     }

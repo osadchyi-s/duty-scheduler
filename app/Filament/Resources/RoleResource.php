@@ -21,15 +21,27 @@ class RoleResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-shield-check';
 
-    protected static ?string $navigationLabel = 'Ролі та права';
-
-    protected static ?string $modelLabel = 'Роль';
-
-    protected static ?string $pluralModelLabel = 'Ролі та права';
-
-    protected static ?string $navigationGroup = 'Кадри та доступ';
-
     protected static ?int $navigationSort = 2;
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Roles and permissions');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('Role');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Roles and permissions');
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('People and access');
+    }
 
     public static function canViewAny(): bool
     {
@@ -40,16 +52,16 @@ class RoleResource extends Resource
     {
         return $form->schema([
             Forms\Components\TextInput::make('name')
-                ->label('Назва ролі')
+                ->label(__('Role name'))
                 ->required()
                 ->unique(ignoreRecord: true)
                 ->maxLength(255),
 
-            Forms\Components\Section::make('Матриця прав')
-                ->description('Довільне перепризначення атомарних прав для цієї ролі')
+            Forms\Components\Section::make(__('Permission matrix'))
+                ->description(__('Configure the permissions assigned to this role'))
                 ->schema([
                     Forms\Components\CheckboxList::make('permissions')
-                        ->label('Права')
+                        ->label(__('Permissions'))
                         ->relationship('permissions', 'name')
                         ->options(fn () => Permission::query()->pluck('name', 'id'))
                         ->columns(3)
@@ -62,12 +74,12 @@ class RoleResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')->label('Роль')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('name')->label(__('Role'))->searchable()->sortable(),
                 Tables\Columns\TextColumn::make('permissions_count')
-                    ->label('К-сть прав')
+                    ->label(__('Number of permissions'))
                     ->counts('permissions'),
                 Tables\Columns\TextColumn::make('users_count')
-                    ->label('К-сть користувачів')
+                    ->label(__('Number of users'))
                     ->counts('users'),
             ])
             ->actions([

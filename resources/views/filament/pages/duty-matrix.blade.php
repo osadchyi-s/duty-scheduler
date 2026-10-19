@@ -18,7 +18,7 @@
         {{-- Панель управління: місяць + тумблери підсвічування (ТЗ п.5.2.4) --}}
         <div class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-900">
             <div class="flex items-center gap-2">
-                <label class="text-sm font-medium">Місяць:</label>
+                <label class="text-sm font-medium">{{ __('Month:') }}</label>
                 <input type="month" wire:model.live="month"
                        class="fi-input rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm" />
             </div>
@@ -26,19 +26,19 @@
             <div class="flex flex-wrap items-center gap-4 text-sm">
                 <label class="flex items-center gap-2">
                     <input type="checkbox" wire:model.live="showHighlights.rest_zones" class="rounded">
-                    Зони відпочинку
+                    {{ __('Rest periods') }}
                 </label>
                 <label class="flex items-center gap-2">
                     <input type="checkbox" wire:model.live="showHighlights.warnings" class="rounded">
-                    Конфлікти / винятки ⚠️
+                    {{ __('Conflicts / exceptions ⚠️') }}
                 </label>
                 <label class="flex items-center gap-2">
                     <input type="checkbox" wire:model.live="showHighlights.capacity" class="rounded">
-                    Дефіцитні дати
+                    {{ __('Dates with staffing deficits') }}
                 </label>
                 <label class="flex items-center gap-2">
                     <input type="checkbox" wire:model.live="showHighlights.weekends" class="rounded">
-                    Вихідні / свята
+                    {{ __('Weekends / holidays') }}
                 </label>
             </div>
         </div>
@@ -51,6 +51,11 @@
                     {{ $type->name }}
                 </span>
             @endforeach
+            <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700">
+                <span class="w-3 h-3 rounded-sm border border-dashed border-gray-500 inline-block"
+                      style="background-image: repeating-linear-gradient(135deg, rgba(100,100,100,.5) 0 2px, transparent 2px 4px)"></span>
+                {{ __('Draft (D)') }}
+            </span>
         </div>
 
         {{-- Матриця --}}
@@ -59,7 +64,7 @@
                 <thead>
                     <tr>
                         <th class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-b border-gray-200 dark:border-gray-700 px-3 py-2 text-left min-w-[180px]">
-                            Співробітник
+                            {{ __('Employee') }}
                         </th>
                         @foreach($this->days as $day)
                             @php
@@ -72,7 +77,7 @@
                             </th>
                         @endforeach
                         <th class="border-b border-l border-gray-200 dark:border-gray-700 px-3 py-2 text-center min-w-[160px]">
-                            Всього / Статистика
+                            {{ __('Total / Statistics') }}
                         </th>
                     </tr>
                 </thead>
@@ -128,21 +133,26 @@
                                                 $prefUntil = $event->ends_at->copy()->addHours($event->eventType->preferred_rest_hours)->format('Y-m-d');
                                             @endphp
                                             @php
+                                                $eventNote = $this->displayEventNote($event->note);
                                                 $eventTitle = $event->warning_reason
                                                     ? '⚠️ ' . $event->warning_reason
-                                                    : ($event->note
-                                                        ? 'Примітка: ' . $event->note
+                                                    : ($eventNote
+                                                        ? __('Note: :note', ['note' => $eventNote])
                                                         : $event->eventType->name . ' (' . $event->starts_at->format('H:i') . '–' . $event->ends_at->format('H:i') . ')');
-                                            @endphp
+                                                    $eventTitle = ($event->status === 'draft' ? __('Draft — ') : __('Approved — ')) . $eventTitle;
+                                                @endphp
                                             <button type="button"
                                                 wire:click="mountAction('assign', { userId: {{ $employee->id }}, date: '{{ $dateKey }}', eventId: {{ $event->id }} })"
                                                 @mouseenter="setRest({{ $employee->id }}, '{{ $minUntil }}', '{{ $prefUntil }}')"
                                                 @mouseleave="clearRest()"
-                                                class="w-full rounded px-1 py-1 text-white text-[10px] leading-tight relative"
-                                                style="background-color: {{ $event->eventType->color_code }}"
+                                                class="w-full rounded px-1 py-1 text-white text-[10px] leading-tight relative {{ $event->status === 'draft' ? 'border border-dashed border-white/80' : '' }}"
+                                                style="background-color: {{ $event->eventType->color_code }}; {{ $event->status === 'draft' ? 'background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.35) 0 3px, transparent 3px 7px);' : '' }}"
                                                 title="{{ $eventTitle }}"
                                             >
                                                 {{ \Illuminate\Support\Str::limit($event->eventType->name, 6, '') }}
+                                                @if($event->status === 'draft')
+                                                    <span class="absolute bottom-0 right-0 rounded-tl bg-black/30 px-0.5 text-[8px] leading-none">D</span>
+                                                @endif
                                                 @if($showHighlights['warnings'] && $event->has_rest_warning)
                                                     <span class="absolute -top-1 -right-1">⚠️</span>
                                                 @endif
@@ -159,14 +169,14 @@
                             @endforeach
 
                             <td class="border-b border-l border-gray-100 dark:border-gray-800 px-3 py-2 text-[11px] whitespace-nowrap">
-                                <div>{{ number_format($totalHours, 0) }} год</div>
+                                <div>{{ __(':hours hours', ['hours' => number_format($totalHours, 0)]) }}</div>
                                 <div class="text-gray-400">
                                     @foreach($typeCounts as $code => $count)
                                         {{ $code }}: {{ $count }}@if(!$loop->last) | @endif
                                     @endforeach
                                 </div>
                                 @if($warningCount > 0)
-                                    <div class="text-amber-600">⚠️ винятків: {{ $warningCount }}</div>
+                                    <div class="text-amber-600">{{ __('⚠️ exceptions: :count', ['count' => $warningCount]) }}</div>
                                 @endif
                             </td>
                         </tr>
@@ -175,7 +185,7 @@
                     {{-- Підсумковий рядок "Непризначено" з підсвічуванням дефіциту (п.5.2.3) --}}
                     <tr class="bg-gray-50 dark:bg-gray-800 font-medium">
                         <td class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 px-3 py-2">
-                            Непризначено ⚠️
+                            {{ __('Unassigned ⚠️') }}
                         </td>
                         @foreach($this->days as $day)
                             @php

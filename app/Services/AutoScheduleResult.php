@@ -15,6 +15,8 @@ class AutoScheduleResult
 
     public int $warningCount = 0;
 
+    public int $deletedCount = 0;
+
     public function addCreated(string $date, string $eventType, string $user, string $status): void
     {
         $this->created[] = compact('date', 'eventType', 'user', 'status');
@@ -48,6 +50,7 @@ class AutoScheduleResult
             'created' => $this->created,
             'deficits' => $this->deficits,
             'warningCount' => $this->warningCount,
+            'deletedCount' => $this->deletedCount,
             'createdCount' => $this->createdCount(),
             'deficitCount' => $this->deficitCount(),
         ];

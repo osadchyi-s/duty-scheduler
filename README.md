@@ -1,131 +1,170 @@
 # Duty Matrix
 
-Модуль графіків чергувань, обліку відсутностей та кадрового планування.
-Laravel 11 + Filament v3 (TALL) + PostgreSQL 16 + Redis 7, у Docker.
+A duty scheduling, absence tracking, and workforce planning application.
+Built with Laravel 11, Filament v3 (TALL), PostgreSQL 16, and Redis 7, and
+configured to run with Docker.
 
-## Запуск (потрібен встановлений Docker + Docker Compose)
+## Getting started
+
+Docker and Docker Compose must be installed.
 
 ```bash
 cp .env.example .env
 make init
 ```
 
-Команда `make init` виконає: збірку образів → підняття контейнерів →
-`composer install` → генерацію `APP_KEY` → міграції → сидинг → публікацію
-ассетів Filament → `storage:link`.
+`make init` builds the images, starts the containers, installs Composer
+dependencies, generates the `APP_KEY`, runs database migrations and seeders,
+publishes Filament assets, and creates the storage link.
 
-Після завершення відкрийте: **http://localhost:8080/admin**
+When initialization is complete, open **http://localhost:8080/admin**.
 
-### Тестові облікові записи (створює `UserSeeder`)
+### Demo accounts
 
-| Роль | Email | Пароль |
+The `UserSeeder` creates these accounts:
+
+| Role | Email | Password |
 |---|---|---|
 | Admin | admin@system.local | password |
 | Manager | manager@system.local | password |
-| User (6 співробітників) | employee1@system.local ... employee6@system.local | password |
+| User (6 employees) | employee1@system.local ... employee6@system.local | password |
 
-## Структура проєкту
+## Project structure
 
-```
+```text
 app/
-  Models/            User, EventType, UserEvent, UserEventTypePermission
+  Models/            User, EventType, UserEvent, UserEventTypePermission,
+                     Synergy, AppSetting
   Services/
-    ConstraintsEngine.php      ← основна бізнес-логіка валідації (ТЗ п.4)
-    ConstraintCheckResult.php  ← DTO результату (optimal/warning/forbidden)
-  Policies/          RBAC-політики під Filament
+    ConstraintsEngine.php      Core assignment validation logic
+    ConstraintCheckResult.php  Validation result (optimal/warning/forbidden)
+    AutoScheduler.php          Automatic schedule generation
+  Policies/          Filament authorization policies
   Filament/
-    Resources/       EventTypeResource, UserResource, RoleResource (матриця прав)
+    Resources/       Event types, employees (including synergies), roles
     Pages/
-      DutyMatrix.php            ← сторінка «Матриця чергувань» (ТЗ п.5)
-      PeriodStatistics.php      ← аналітичні звіти (ТЗ п.6.2)
+      DutyMatrix.php            Duty matrix
+      AutoSchedule.php          Automatic schedule generation
+      PeriodStatistics.php      Period reports and statistics
+      AppSettings.php           Administrator settings, including locale
   Exports/
-    ScheduleExport.php  ← експорт .xlsx зі стилями (ТЗ п.7)
+    ScheduleExport.php          Styled .xlsx export
 database/
-  migrations/        event_types, user_events, user_event_type_permissions, spatie-permission
-  seeders/           RoleAndPermissionSeeder, UserSeeder, EventTypeSeeder
+  migrations/        Events, permissions, synergies, and application settings
+  seeders/           Roles, users, and event types
+lang/
+  en.json            English source strings
+  uk.json            Ukrainian translations
 resources/views/filament/pages/
-  duty-matrix.blade.php         ← сітка матриці, sticky-колонка, Alpine hover-підсвічування
+  duty-matrix.blade.php
+  auto-schedule.blade.php
   period-statistics.blade.php
-tests/Unit/ConstraintsEngineTest.php  ← Pest-тести на всі 4 рівні Constraints Engine
+tests/Unit/          Constraints Engine and AutoScheduler tests
 docker-compose.yml, Dockerfile, Makefile, docker/
 ```
 
-## Як влаштована логіка обмежень (ключова частина ТЗ)
+## Assignment constraints
 
-`app/Services/ConstraintsEngine.php::validate()` виконує 4 перевірки по черзі
-й повертає `ConstraintCheckResult` з одним із трьох статусів:
+`app/Services/ConstraintsEngine.php::validate()` checks an assignment and
+returns a `ConstraintCheckResult` with one of three statuses:
 
-1. **checkPermission** — чи є запис у `user_event_type_permissions`
-2. **checkBlockingExclusivity** — чи не конфліктує з `is_blocking`-подією (в обидва боки)
-3. **checkCapacity** — чи не перевищено `max_capacity` на дату
-4. **evaluateRestPeriod** — рахує відпочинок і ДО, і ПІСЛЯ нової події
-   відносно сусідніх подій співробітника, обирає найгірший статус:
-   `optimal` (≥ preferred) / `warning` (∈ [min, preferred)) / `forbidden` (< min)
+1. **Permission** — the employee is allowed to work the selected event type
+   (`user_event_type_permissions`).
+2. **Blocking-event exclusivity** — the assignment does not conflict with an
+   `is_blocking` event. Blocking conflicts are checked in both directions.
+3. **Overlapping work events** — an employee cannot be assigned overlapping
+   work-time events, even when neither event type is marked as blocking.
+4. **Capacity** — the event type's `max_capacity` is not exceeded.
+5. **Rest period** — rest before and after the assignment is checked against
+   the neighboring work events:
+   `optimal` (at least preferred rest), `warning` (between minimum and
+   preferred rest), or `forbidden` (below the minimum).
 
-Викликається з `DutyMatrix::createEvent()` при кожному швидкому призначенні
-через модальне вікно. При `warning` подія все одно створюється, але з
-`has_rest_warning = true` — саме це поле малює ⚠️ у клітинці матриці.
+The duty matrix uses this validation when an event is assigned or edited.
+Assignments that produce a rest warning are still allowed and are saved with
+`has_rest_warning = true`, which displays a warning indicator in the matrix.
 
-## Що вже працює
+## Features
 
-- Повна RBAC-модель через Spatie Permission: Admin / Manager / User +
-  довільні кастомні ролі з гнучкою матрицею прав (`RoleResource`, лише для Admin)
-- Уніфікована модель `user_events` + `event_types` як описано в ТЗ
-- Constraints Engine з усіма 4 рівнями перевірки і покриттям тестами
-- Матриця чергувань: sticky-колонка, вихідні, кольори типів подій,
-  клік по клітинці → модальне швидке призначення, тумблери підсвічування,
-  рядок «Непризначено ⚠️» з дефіцитом по `min_capacity`
-- Rest zone highlighting при наведенні (Alpine.js, client-side)
-- Сторінка звітів: розподіл навантаження, кадровий дефіцит, % винятків
-- Excel-експорт з кольорами клітинок і підсумковими колонками
-- Redis-кеш для матриці, довідника типів подій і покриття (з інвалідацією при записі)
-- **Автогенерація графіка наперед** (`app/Services/AutoScheduler.php` +
-  сторінка «Автогенерація графіка»): за обраний період (типово — місяць)
-  і обрані типи подій (типово — ті, де `min_capacity > 0`) жадібний
-  алгоритм зі справедливим балансуванням навантаження розставляє
-  співробітників по днях, пропускаючи кожного кандидата через
-  `ConstraintsEngine`. Створює лише `draft`-події; дні, які не вдалось
-  заповнити (немає допущеного і водночас "прохідного" по обмеженнях
-  співробітника), потрапляють у список дефіциту для ручного розбору.
-  Покрито тестами (`tests/Unit/AutoSchedulerTest.php`).
-- Docker Compose: app / webserver (nginx) / db (Postgres 16) / redis / worker (queue)
-- Makefile з усіма командами з ТЗ п.8.3
+- Role-based access control with Admin, Manager, and User roles, plus
+  administrator-managed custom roles and permissions.
+- Event types and employee permissions, including event capacity, blocking,
+  work-time, and rest-period settings.
+- A monthly duty matrix with event-type colors, weekend highlighting,
+  interactive assignment, rest-period highlighting, staffing deficit
+  indicators, and draft events marked with stripes and a `D`.
+- Period reports for workload distribution, staffing deficits, and rest
+  warnings.
+- Excel export with event colors and summary columns.
+- Redis caching for the matrix, event types, and staffing coverage, with cache
+  invalidation when assignments change.
+- Automatic schedule generation for a selected date range and event types.
+  The default period is a month; when launched from the matrix, its displayed
+  month is preselected. The scheduler balances workload, validates candidates
+  through the Constraints Engine, and creates assignments as `draft` events.
+  Any unfilled slots are reported for manual review.
+- Three modes for handling existing assignments during auto-generation:
+  fill missing slots while preserving existing assignments; delete and
+  regenerate selected drafts only; or delete and regenerate all active
+  assignments of the selected event types in the period. Delete modes require
+  confirmation and do not delete cancelled events.
+- Managers and administrators can approve an individual draft or approve all
+  drafts displayed in the current matrix month.
+- Employee synergy scores that apply to a pair in both employees' profiles.
+  A synergy can apply to selected event types or to all types when none are
+  selected. The slider starts with `-1`, `0`, and `1`; the numeric input and
+  increment/decrement controls accept any integer. Lower scores are red and
+  higher scores are green.
 
-## Що варто зробити першим (реалістичний roadmap)
+## Employee synergy
 
-1. **Прогнати `make init` і виправити дрібні неточності складання.**
-   Найімовірніші місця: точні назви методів Filament v3 API (деякі методи типу
-   `->after('starts_at')` на DateTimePicker, `extraModalFooterActions`) —
-   звірте з `composer.lock`-версією `filament/filament`, яку встановить Docker.
-2. **Rest zone highlighting зробити повністю серверним/точним** — зараз це
-   спрощена Alpine-реалізація на hover; для продакшн-якості варто
-   попередньо обчислювати зони на бекенді й віддавати як data-атрибути
-   для кожної клітинки одразу (а не лише в момент наведення).
-3. **Статус `approved`/затвердження графіка** — модель `status` enum вже є,
-   але UI-дії "затвердити місяць" (масова зміна `draft → approved`, доступна
-   Manager/Admin) ще не реалізовані — це явно згадано в ТЗ п.2.1.
-4. **Автогенерація: перенести у чергу (queue worker)** — зараз рахує
-   синхронно в HTTP-запиті; для великих періодів/штату (сотні людей × рік)
-   варто dispatch'ити `Job`, який вже готовий інфраструктурно
-   (`docker-compose worker`-контейнер уже піднятий і чекає), і показувати
-   прогрес через Livewire-поллінг або database-нотифікацію по завершенню.
-5. **Drag-and-drop переміщення подій** у матриці (зараз лише клік → модалка) —
-   природне розширення Livewire-компонента з `wire:drag`/Alpine або SortableJS.
-5. **Тести Feature-рівня** на Filament-ресурси й Policy (зараз є лише Unit-тести
-   Constraints Engine).
-6. **Продуктивність на 50×31**: перевірити реальний час рендеру великої матриці
-   і за потреби пагінувати/лінивого підвантажувати місяці замість повного eager load.
+Each synergy record represents an **unordered employee pair**. The score is
+stored once, shown on both employees' profiles, and duplicate pair records are
+not created. A score of `0` is neutral; positive scores increase the chance
+that the employees will be assigned together, while negative scores decrease
+it.
 
-## Якщо щось не запускається
+Select the event types for which the score should apply. If no event types are
+selected, it applies to all event types. During schedule generation, the
+scheduler calculates the candidate's average applicable synergy with
+employees already assigned on that date. Better synergy can increase the
+candidate's selection weight by up to 100 times. Workload in hours and shift
+count also affect the weight to maintain a fair distribution. Selection is
+randomized to avoid repeatedly generating the same pairs, while permission,
+rest, capacity, and exclusivity checks still apply.
+
+## Interface language
+
+The application supports English and Ukrainian. The selected locale is stored
+globally in the `app_settings` table and is applied to the admin panel,
+including its login page. Only users with the `Admin` role can change it:
+open **Settings → Application settings**, select a language, and save. The
+selection applies to subsequent requests for all users.
+
+English source strings are in `lang/en.json`, and Ukrainian translations are
+in `lang/uk.json`. After updating an existing installation, apply migrations:
 
 ```bash
-make logs-app        # логи PHP-контейнера
-make shell            # зайти всередину і подивитись помилку вручну
-docker compose exec app php artisan about   # перевірити конфігурацію Laravel
-docker compose exec app composer show filament/filament   # яка версія встановилась
+php artisan migrate
 ```
 
-Найчастіша причина падіння на першому запуску — розбіжність версій
-`filament/filament`.
-Якщо `composer install` підтягне новішу мажорну версію з іншим API —
-звузьте версію в `composer.json` до конкретного релізу 3.x, з яким писався код.
+For a new environment, `make init` runs the migrations as part of setup.
+
+## Docker services and commands
+
+Docker Compose runs the application, nginx web server, PostgreSQL 16, Redis,
+and a queue worker. The Makefile provides project setup and maintenance
+commands.
+
+## Troubleshooting
+
+```bash
+make logs-app
+make shell
+docker compose exec app php artisan about
+docker compose exec app composer show filament/filament
+```
+
+If the application fails during setup, check the installed `filament/filament`
+version. If Composer installs a newer major version with an incompatible API,
+constrain `filament/filament` in `composer.json` to a compatible 3.x release.

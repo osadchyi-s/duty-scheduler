@@ -48,6 +48,12 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(UserEvent::class);
     }
 
+    public function synergies(): HasMany
+    {
+        return $this->hasMany(Synergy::class, 'user_a_id')
+            ->orWhere('user_b_id', $this->getKey());
+    }
+
     public function allowedEventTypes(): BelongsToMany
     {
         return $this->belongsToMany(EventType::class, 'user_event_type_permissions');

@@ -53,7 +53,10 @@ class ConstraintsEngine
     {
         if (! $user->isAllowedEventType($eventType->id)) {
             return ConstraintCheckResult::forbidden(
-                "Співробітнику {$user->name} не дозволено призначати тип події «{$eventType->name}» (немає допуску)."
+                __('Employee :name is not allowed to be assigned event type “:event” (no permission).', [
+                    'name' => $user->name,
+                    'event' => $eventType->name,
+                ])
             );
         }
 
@@ -84,7 +87,12 @@ class ConstraintsEngine
             $conflict = $overlapping->first();
 
             return ConstraintCheckResult::forbidden(
-                "Подія «{$eventType->name}» є ексклюзивною (is_blocking) і конфліктує з наявною подією «{$conflict->eventType->name}» ({$conflict->starts_at->format('d.m H:i')}–{$conflict->ends_at->format('d.m H:i')})."
+                __('Event “:event” is exclusive (is_blocking) and conflicts with existing event “:conflict” (:from–:to).', [
+                    'event' => $eventType->name,
+                    'conflict' => $conflict->eventType->name,
+                    'from' => $conflict->starts_at->format('d.m H:i'),
+                    'to' => $conflict->ends_at->format('d.m H:i'),
+                ])
             );
         }
 
@@ -92,8 +100,29 @@ class ConstraintsEngine
         $blockingConflict = $overlapping->first(fn (UserEvent $e) => $e->eventType->is_blocking);
         if ($blockingConflict) {
             return ConstraintCheckResult::forbidden(
-                "Співробітник вже перебуває в ексклюзивній події «{$blockingConflict->eventType->name}» ({$blockingConflict->starts_at->format('d.m')}–{$blockingConflict->ends_at->format('d.m')}), що блокує будь-які інші призначення."
+                __('The employee is already in exclusive event “:event” (:from–:to), which blocks all other assignments.', [
+                    'event' => $blockingConflict->eventType->name,
+                    'from' => $blockingConflict->starts_at->format('d.m'),
+                    'to' => $blockingConflict->ends_at->format('d.m'),
+                ])
             );
+        }
+
+        if ($eventType->is_work_time) {
+            $overlappingWorkEvent = $overlapping->first(
+                fn (UserEvent $event): bool => $event->eventType->is_work_time
+            );
+
+            if ($overlappingWorkEvent) {
+                return ConstraintCheckResult::forbidden(
+                    __('Duty “:event” overlaps with working event “:conflict” (:from–:to).', [
+                        'event' => $eventType->name,
+                        'conflict' => $overlappingWorkEvent->eventType->name,
+                        'from' => $overlappingWorkEvent->starts_at->format('d.m H:i'),
+                        'to' => $overlappingWorkEvent->ends_at->format('d.m H:i'),
+                    ])
+                );
+            }
         }
 
         return null;
@@ -122,7 +151,10 @@ class ConstraintsEngine
 
         if ($currentCount >= $eventType->max_capacity) {
             return ConstraintCheckResult::forbidden(
-                "Досягнуто максимальної місткості ({$eventType->max_capacity}) для типу події «{$eventType->name}» на цей період."
+                __('Maximum capacity (:capacity) reached for event type “:event” in this period.', [
+                    'capacity' => $eventType->max_capacity,
+                    'event' => $eventType->name,
+                ])
             );
         }
 
@@ -173,7 +205,10 @@ class ConstraintsEngine
                 $worstStatus, $worstRestHours, $reason,
                 $this->classifyRest($restBefore, $eventType->min_rest_hours, $eventType->preferred_rest_hours),
                 $restBefore,
-                "Відпочинок після попередньої події ({$restBefore} год) менший за бажаний ({$eventType->preferred_rest_hours} год)."
+                __('Rest after the previous event (:hours hours) is below the preferred amount (:preferred hours).', [
+                    'hours' => $restBefore,
+                    'preferred' => $eventType->preferred_rest_hours,
+                ])
             );
         }
 
@@ -185,17 +220,21 @@ class ConstraintsEngine
                 $worstStatus, $worstRestHours, $reason,
                 $this->classifyRest($restAfter, $nextType->min_rest_hours, $nextType->preferred_rest_hours),
                 $restAfter,
-                "Відпочинок перед наступною подією «{$nextType->name}» ({$restAfter} год) менший за її бажаний поріг ({$nextType->preferred_rest_hours} год)."
+                __('Rest before the next event “:event” (:hours hours) is below its preferred threshold (:preferred hours).', [
+                    'event' => $nextType->name,
+                    'hours' => $restAfter,
+                    'preferred' => $nextType->preferred_rest_hours,
+                ])
             );
         }
 
         return match ($worstStatus) {
             ConstraintCheckResult::STATUS_FORBIDDEN => ConstraintCheckResult::forbidden(
-                $reason ?? 'Порушення мінімального обов’язкового відпочинку.',
+                $reason ?? __('Required minimum rest period violated.'),
                 $worstRestHours
             ),
             ConstraintCheckResult::STATUS_WARNING => ConstraintCheckResult::warning(
-                $reason ?? 'Призначення в межах бажаного (не мінімального) відпочинку.',
+                $reason ?? __('Assignment is within the preferred (but not minimum) rest period.'),
                 $worstRestHours
             ),
             default => ConstraintCheckResult::ok($worstRestHours),

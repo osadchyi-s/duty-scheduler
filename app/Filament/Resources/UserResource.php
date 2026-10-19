@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
+use App\Filament\Resources\UserResource\RelationManagers\SynergiesRelationManager;
 use App\Models\EventType;
 use App\Models\User;
 use Filament\Forms;
@@ -20,40 +21,52 @@ class UserResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
 
-    protected static ?string $navigationLabel = 'Співробітники';
-
-    protected static ?string $modelLabel = 'Співробітник';
-
-    protected static ?string $pluralModelLabel = 'Співробітники';
-
-    protected static ?string $navigationGroup = 'Кадри та доступ';
-
     protected static ?int $navigationSort = 1;
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Employees');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('Employee');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Employees');
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('People and access');
+    }
 
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Обліковий запис')
+            Forms\Components\Section::make(__('Account'))
                 ->columns(2)
                 ->schema([
-                    Forms\Components\TextInput::make('name')->label('ПІБ')->required()->maxLength(255),
-                    Forms\Components\TextInput::make('email')->label('Email')->email()->required()
+                    Forms\Components\TextInput::make('name')->label(__('Full name'))->required()->maxLength(255),
+                    Forms\Components\TextInput::make('email')->label(__('Email'))->email()->required()
                         ->unique(ignoreRecord: true)->maxLength(255),
                     Forms\Components\TextInput::make('password')
-                        ->label('Пароль')
+                        ->label(__('Password'))
                         ->password()
                         ->dehydrateStateUsing(fn ($state) => Hash::make($state))
                         ->dehydrated(fn ($state) => filled($state))
                         ->required(fn (string $context) => $context === 'create')
-                        ->helperText('Залиште порожнім, щоб не змінювати'),
-                    Forms\Components\TextInput::make('position')->label('Посада')->maxLength(255),
-                    Forms\Components\Toggle::make('is_active')->label('Активний')->default(true),
+                        ->helperText(__('Leave blank to keep the current password')),
+                    Forms\Components\TextInput::make('position')->label(__('Position'))->maxLength(255),
+                    Forms\Components\Toggle::make('is_active')->label(__('Active'))->default(true),
                 ]),
 
-            Forms\Components\Section::make('Роль доступу')
+            Forms\Components\Section::make(__('Access role'))
                 ->schema([
                     Forms\Components\Select::make('roles')
-                        ->label('Роль')
+                        ->label(__('Role'))
                         ->relationship('roles', 'name')
                         ->options(function () {
                             // Manager може призначати лише User/Manager, не Admin.
@@ -69,11 +82,11 @@ class UserResource extends Resource
                         ->required(),
                 ]),
 
-            Forms\Components\Section::make('Допуски до типів подій (user_event_type_permissions)')
-                ->description('Які типи чергувань/відсутностей дозволено призначати цьому співробітнику')
+            Forms\Components\Section::make(__('Event type permissions'))
+                ->description(__('Event types and absences this employee may be assigned'))
                 ->schema([
                     Forms\Components\CheckboxList::make('allowedEventTypes')
-                        ->label('Дозволені типи подій')
+                        ->label(__('Allowed event types'))
                         ->relationship('allowedEventTypes', 'name')
                         ->options(fn () => EventType::query()->orderBy('sort_order')->pluck('name', 'id'))
                         ->columns(2),
@@ -85,15 +98,15 @@ class UserResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')->label('ПІБ')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('email')->label('Email')->searchable(),
-                Tables\Columns\TextColumn::make('position')->label('Посада'),
-                Tables\Columns\TextColumn::make('roles.name')->label('Ролі')->badge(),
-                Tables\Columns\IconColumn::make('is_active')->label('Активний')->boolean(),
+                Tables\Columns\TextColumn::make('name')->label(__('Full name'))->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('email')->label(__('Email'))->searchable(),
+                Tables\Columns\TextColumn::make('position')->label(__('Position')),
+                Tables\Columns\TextColumn::make('roles.name')->label(__('Roles'))->badge(),
+                Tables\Columns\IconColumn::make('is_active')->label(__('Active'))->boolean(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('roles')->relationship('roles', 'name')->label('Роль'),
-                Tables\Filters\TernaryFilter::make('is_active')->label('Активність'),
+                Tables\Filters\SelectFilter::make('roles')->relationship('roles', 'name')->label(__('Role')),
+                Tables\Filters\TernaryFilter::make('is_active')->label(__('Active status')),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
@@ -112,6 +125,13 @@ class UserResource extends Resource
             'index' => Pages\ListUsers::route('/'),
             'create' => Pages\CreateUser::route('/create'),
             'edit' => Pages\EditUser::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            SynergiesRelationManager::class,
         ];
     }
 }

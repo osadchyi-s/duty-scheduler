@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\AppSetting;
 use App\Models\EventType;
 use App\Models\User;
 use App\Models\UserEvent;
@@ -87,6 +88,19 @@ class DutyMatrix extends Page implements HasForms, HasActions
         'capacity' => true,
         'weekends' => true,
     ];
+
+    /**
+     * Apply the configured locale on every Livewire request. The ApplyConfiguredLocale
+     * middleware only runs on full page loads, so AJAX requests (wire:navigate,
+     * reactive selects) would otherwise fall back to the default locale and, e.g.,
+     * render month names in the wrong language.
+     */
+    public function boot(): void
+    {
+        $locale = AppSetting::currentLocale();
+        app()->setLocale($locale);
+        Carbon::setLocale($locale);
+    }
 
     public function mount(): void
     {
@@ -174,9 +188,10 @@ class DutyMatrix extends Page implements HasForms, HasActions
     /** Localized month options (1 => January, ...) for the month <select>. */
     public function getMonthOptionsProperty(): array
     {
+        $locale = app()->getLocale();
         $options = [];
         for ($m = 1; $m <= 12; $m++) {
-            $options[$m] = ucfirst(Carbon::create(null, $m, 1)->translatedFormat('F'));
+            $options[$m] = ucfirst(Carbon::create(null, $m, 1)->locale($locale)->translatedFormat('F'));
         }
 
         return $options;

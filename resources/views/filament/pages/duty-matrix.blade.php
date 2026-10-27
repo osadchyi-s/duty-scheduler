@@ -17,10 +17,21 @@
     >
         {{-- Control panel: month + highlight toggles (spec 5.2.4) --}}
         <div class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-900">
+            {{-- Native <select> controls instead of <input type="month">, which Firefox does not support. --}}
             <div class="flex items-center gap-2">
                 <label class="text-sm font-medium">{{ __('Month:') }}</label>
-                <input type="month" wire:model.live="month"
-                       class="fi-input rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm" />
+                <select wire:model.live="selectedMonth"
+                        class="fi-input rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm">
+                    @foreach($this->monthOptions as $value => $name)
+                        <option value="{{ $value }}">{{ $name }}</option>
+                    @endforeach
+                </select>
+                <select wire:model.live="selectedYear"
+                        class="fi-input rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm">
+                    @foreach($this->yearOptions as $year)
+                        <option value="{{ $year }}">{{ $year }}</option>
+                    @endforeach
+                </select>
             </div>
 
             <div class="flex flex-wrap items-center gap-4 text-sm">

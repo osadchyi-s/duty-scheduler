@@ -23,7 +23,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Модуль «Матриця чергувань» — головне робоче місце диспетчера/менеджера (ТЗ п.5).
+ * "Duty Matrix" module — the main workspace for the dispatcher/manager (spec 5).
  */
 class DutyMatrix extends Page implements HasForms, HasActions
 {
@@ -36,7 +36,17 @@ class DutyMatrix extends Page implements HasForms, HasActions
 
     protected static ?int $navigationSort = 0;
 
+    /** Canonical selected period in "Y-m" format. */
     public string $month;
+
+    /**
+     * Month/year are also exposed as separate integer properties so the view can
+     * use plain <select> controls. Firefox does not support <input type="month">,
+     * so a native month picker would show neither an icon nor a dropdown there.
+     */
+    public int $selectedMonth;
+
+    public int $selectedYear;
 
     /**
      * Use the full page width (instead of the default 80rem container) so the
@@ -81,6 +91,9 @@ class DutyMatrix extends Page implements HasForms, HasActions
     public function mount(): void
     {
         $this->month = request('month', now()->format('Y-m'));
+        $parsed = Carbon::createFromFormat('Y-m', $this->month);
+        $this->selectedMonth = (int) $parsed->month;
+        $this->selectedYear = (int) $parsed->year;
     }
 
     protected function getHeaderActions(): array
@@ -139,7 +152,49 @@ class DutyMatrix extends Page implements HasForms, HasActions
 
     public function updatedMonth(): void
     {
-        // no-op, реактивно перебудує сітку через getEmployeesWithEvents()
+        // no-op: the grid rebuilds reactively via getEmployeesWithEvents().
+    }
+
+    /** Recompose the canonical "Y-m" value whenever the month/year selects change. */
+    public function updatedSelectedMonth(): void
+    {
+        $this->syncMonthFromParts();
+    }
+
+    public function updatedSelectedYear(): void
+    {
+        $this->syncMonthFromParts();
+    }
+
+    protected function syncMonthFromParts(): void
+    {
+        $this->month = sprintf('%04d-%02d', $this->selectedYear, $this->selectedMonth);
+    }
+
+    /** Localized month options (1 => January, ...) for the month <select>. */
+    public function getMonthOptionsProperty(): array
+    {
+        $options = [];
+        for ($m = 1; $m <= 12; $m++) {
+            $options[$m] = ucfirst(Carbon::create(null, $m, 1)->translatedFormat('F'));
+        }
+
+        return $options;
+    }
+
+    /** Year options spanning a few years around the current one (plus the selected year). */
+    public function getYearOptionsProperty(): array
+    {
+        $current = (int) now()->year;
+        $years = range($current - 2, $current + 2);
+
+        if (! in_array($this->selectedYear, $years, true)) {
+            $years[] = $this->selectedYear;
+        }
+
+        sort($years);
+
+        return $years;
     }
 
     protected function periodBounds(): array
@@ -162,7 +217,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
     }
 
     /**
-     * Один запит з eager loading (п.9.1: N+1 problem) + кеш обчислень у Redis (п.9.2).
+     * Single query with eager loading (spec 9.1: N+1 problem) + computed cache in Redis (spec 9.2).
      */
     public function getEmployeesProperty(): Collection
     {
@@ -191,7 +246,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
     }
 
     /**
-     * Мапа user_id => date('Y-m-d') => UserEvent, для швидкого рендеру клітинок.
+     * Map of user_id => date('Y-m-d') => UserEvent, for fast cell rendering.
      */
     public function eventsIndexFor(User $user): array
     {
@@ -211,7 +266,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
     }
 
     /**
-     * Підсумок покриття по датах (для нижнього рядка "Непризначено ⚠️").
+     * Coverage summary per date (for the bottom "Unassigned ⚠️" row).
      */
     public function getCoverageProperty(): array
     {
@@ -230,7 +285,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
     }
 
     /**
-     * Дії "Швидке призначення" — модальне вікно (ТЗ п.5.2.1).
+     * "Quick Assign" action — modal window (spec 5.2.1).
      */
     public function assignAction(): Action
     {

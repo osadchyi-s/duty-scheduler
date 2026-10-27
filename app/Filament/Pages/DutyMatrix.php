@@ -18,6 +18,7 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Support\Enums\MaxWidth;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
@@ -36,6 +37,15 @@ class DutyMatrix extends Page implements HasForms, HasActions
     protected static ?int $navigationSort = 0;
 
     public string $month;
+
+    /**
+     * Use the full page width (instead of the default 80rem container) so the
+     * monthly duty matrix can stretch across the whole screen on wide monitors.
+     */
+    public function getMaxContentWidth(): MaxWidth
+    {
+        return MaxWidth::Full;
+    }
 
     public static function getNavigationLabel(): string
     {

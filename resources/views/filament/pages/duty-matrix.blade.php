@@ -61,25 +61,25 @@
         {{-- Matrix --}}
         <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
             {{-- table-fixed + w-full: side columns are fixed, day columns stretch evenly to fill the full width.
-                 min-width keeps horizontal scroll on narrow screens (~44px per day). --}}
-            <table class="w-full table-fixed text-xs border-collapse"
-                   style="min-width: {{ 340 + count($this->days) * 44 }}px">
+                 min-width keeps horizontal scroll on narrow screens (~36px per day). --}}
+            <table class="w-full table-fixed text-[11px] border-collapse"
+                   style="min-width: {{ 300 + count($this->days) * 36 }}px">
                 <thead>
                     <tr>
-                        <th class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-b border-gray-200 dark:border-gray-700 px-3 py-2 text-left w-[180px]">
+                        <th class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-b border-gray-200 dark:border-gray-700 px-2 py-1.5 text-left w-[150px]">
                             {{ __('Employee') }}
                         </th>
                         @foreach($this->days as $day)
                             @php
                                 $isWeekend = $day->isWeekend();
                             @endphp
-                            <th class="border-b border-gray-200 dark:border-gray-700 px-2 py-2 text-center
+                            <th class="border-b border-gray-200 dark:border-gray-700 px-1 py-1 text-center
                                        {{ $showHighlights['weekends'] && $isWeekend ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400' : '' }}">
                                 {{ $day->format('d') }}<br>
-                                <span class="text-[10px] text-gray-400">{{ $day->translatedFormat('D') }}</span>
+                                <span class="text-[9px] text-gray-400">{{ $day->translatedFormat('D') }}</span>
                             </th>
                         @endforeach
-                        <th class="border-b border-l border-gray-200 dark:border-gray-700 px-3 py-2 text-center w-[160px]">
+                        <th class="border-b border-l border-gray-200 dark:border-gray-700 px-2 py-1.5 text-center w-[150px]">
                             {{ __('Total / Statistics') }}
                         </th>
                     </tr>
@@ -111,9 +111,9 @@
                             }
                         @endphp
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                            <td class="sticky left-0 z-10 bg-white dark:bg-gray-900 border-r border-b border-gray-200 dark:border-gray-700 px-3 py-2 font-medium whitespace-nowrap">
+                            <td class="sticky left-0 z-10 bg-white dark:bg-gray-900 border-r border-b border-gray-200 dark:border-gray-700 px-2 py-1 font-medium whitespace-nowrap">
                                 {{ $employee->name }}
-                                <div class="text-[10px] text-gray-400 font-normal">{{ $employee->position }}</div>
+                                <div class="text-[9px] text-gray-400 font-normal">{{ $employee->position }}</div>
                             </td>
 
                             @foreach($this->days as $day)
@@ -122,7 +122,7 @@
                                     $dayEvents = $eventsIndex[$dateKey] ?? [];
                                     $isWeekend = $day->isWeekend();
                                 @endphp
-                                <td class="border-b border-gray-100 dark:border-gray-800 p-1 text-center align-middle
+                                <td class="border-b border-gray-100 dark:border-gray-800 p-0.5 text-center align-middle
                                            {{ $showHighlights['weekends'] && $isWeekend ? 'bg-red-50/50 dark:bg-red-950/20' : '' }}"
                                     :class="{
                                         'bg-red-100 dark:bg-red-900/40': {{ $showHighlights['rest_zones'] ? 'true' : 'false' }} && inMinZone({{ $employee->id }}, '{{ $dateKey }}'),
@@ -148,7 +148,7 @@
                                                 wire:click="mountAction('assign', { userId: {{ $employee->id }}, date: '{{ $dateKey }}', eventId: {{ $event->id }} })"
                                                 @mouseenter="setRest({{ $employee->id }}, '{{ $minUntil }}', '{{ $prefUntil }}')"
                                                 @mouseleave="clearRest()"
-                                                class="w-full rounded px-1 py-1 text-white text-[10px] leading-tight relative {{ $event->status === 'draft' ? 'border border-dashed border-white/80' : '' }}"
+                                                class="w-full rounded px-0.5 py-0.5 text-white text-[9px] leading-tight relative {{ $event->status === 'draft' ? 'border border-dashed border-white/80' : '' }}"
                                                 style="background-color: {{ $event->eventType->color_code }}; {{ $event->status === 'draft' ? 'background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.35) 0 3px, transparent 3px 7px);' : '' }}"
                                                 title="{{ $eventTitle }}"
                                             >
@@ -164,14 +164,14 @@
                                     @else
                                         <button type="button"
                                             wire:click="mountAction('assign', { userId: {{ $employee->id }}, date: '{{ $dateKey }}' })"
-                                            class="w-full h-6 rounded hover:bg-primary-100 dark:hover:bg-primary-900/30 text-gray-300">
+                                            class="w-full h-5 rounded hover:bg-primary-100 dark:hover:bg-primary-900/30 text-gray-300">
                                             +
                                         </button>
                                     @endif
                                 </td>
                             @endforeach
 
-                            <td class="border-b border-l border-gray-100 dark:border-gray-800 px-3 py-2 text-[11px] whitespace-nowrap">
+                            <td class="border-b border-l border-gray-100 dark:border-gray-800 px-2 py-1 text-[10px] whitespace-nowrap">
                                 <div>{{ __(':hours hours', ['hours' => number_format($totalHours, 0)]) }}</div>
                                 <div class="text-gray-400">
                                     @foreach($typeCounts as $code => $count)
@@ -187,7 +187,7 @@
 
                     {{-- "Unassigned" summary row with staffing-deficit highlight (spec 5.2.3) --}}
                     <tr class="bg-gray-50 dark:bg-gray-800 font-medium">
-                        <td class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 px-3 py-2">
+                        <td class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 px-2 py-1">
                             {{ __('Unassigned ⚠️') }}
                         </td>
                         @foreach($this->days as $day)
@@ -201,7 +201,7 @@
                                     }
                                 }
                             @endphp
-                            <td class="px-2 py-2 text-center
+                            <td class="px-1 py-1 text-center
                                 {{ $showHighlights['capacity'] && $deficit ? 'bg-red-200 dark:bg-red-900 text-red-700 dark:text-red-300' : '' }}">
                                 {{ $deficit ? '⚠️' : '' }}
                             </td>

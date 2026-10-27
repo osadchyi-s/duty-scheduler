@@ -65,7 +65,7 @@
             <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700">
                 <span class="w-3 h-3 rounded-sm border border-dashed border-gray-500 inline-block"
                       style="background-image: repeating-linear-gradient(135deg, rgba(100,100,100,.5) 0 2px, transparent 2px 4px)"></span>
-                {{ __('Draft (D)') }}
+                {{ __('Draft') }}
             </span>
         </div>
 
@@ -164,9 +164,6 @@
                                                 title="{{ $eventTitle }}"
                                             >
                                                 {{ \Illuminate\Support\Str::limit($event->eventType->name, 6, '') }}
-                                                @if($event->status === 'draft')
-                                                    <span class="absolute bottom-0 right-0 rounded-tl bg-black/30 px-0.5 text-[8px] leading-none">D</span>
-                                                @endif
                                                 @if($showHighlights['warnings'] && $event->has_rest_warning)
                                                     <span class="absolute -top-1 -right-1">⚠️</span>
                                                 @endif

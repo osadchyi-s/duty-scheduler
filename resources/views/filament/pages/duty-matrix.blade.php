@@ -1,4 +1,8 @@
 <x-filament-panels::page>
+    {{-- Temporarily hidden: the "Total / Statistics" column is kept in the markup but not
+         rendered for now (it gets in the way). Flip this flag to true to bring it back. --}}
+    @php($showStatsColumn = false)
+
     <div x-data="{
             restZone: { userId: null, minUntil: null, preferredUntil: null },
             setRest(userId, minUntil, preferredUntil) {
@@ -74,7 +78,7 @@
             {{-- table-fixed + w-full: side columns are fixed, day columns stretch evenly to fill the full width.
                  min-width keeps horizontal scroll on narrow screens (~36px per day). --}}
             <table class="w-full table-fixed text-[11px] border-collapse"
-                   style="min-width: {{ 300 + count($this->days) * 36 }}px">
+                   style="min-width: {{ (150 + ($showStatsColumn ? 150 : 0)) + count($this->days) * 36 }}px">
                 <thead>
                     <tr>
                         <th class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-b border-gray-200 dark:border-gray-700 px-2 py-1.5 text-left w-[150px]">
@@ -84,15 +88,17 @@
                             @php
                                 $isWeekend = $day->isWeekend();
                             @endphp
-                            <th class="border-b border-gray-200 dark:border-gray-700 px-1 py-1 text-center
+                            <th class="border-b border-r border-gray-200 dark:border-gray-700 px-1 py-1 text-center
                                        {{ $showHighlights['weekends'] && $isWeekend ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400' : '' }}">
                                 {{ $day->format('d') }}<br>
                                 <span class="text-[9px] text-gray-400">{{ $day->translatedFormat('D') }}</span>
                             </th>
                         @endforeach
-                        <th class="border-b border-l border-gray-200 dark:border-gray-700 px-2 py-1.5 text-center w-[150px]">
-                            {{ __('Total / Statistics') }}
-                        </th>
+                        @if($showStatsColumn)
+                            <th class="border-b border-l border-gray-200 dark:border-gray-700 px-2 py-1.5 text-center w-[150px]">
+                                {{ __('Total / Statistics') }}
+                            </th>
+                        @endif
                     </tr>
                 </thead>
                 <tbody>
@@ -133,7 +139,7 @@
                                     $dayEvents = $eventsIndex[$dateKey] ?? [];
                                     $isWeekend = $day->isWeekend();
                                 @endphp
-                                <td class="border-b border-gray-100 dark:border-gray-800 p-0.5 text-center align-middle
+                                <td class="border-b border-r border-gray-100 dark:border-gray-800 p-0.5 text-center align-middle
                                            {{ $showHighlights['weekends'] && $isWeekend ? 'bg-red-50/50 dark:bg-red-950/20' : '' }}"
                                     :class="{
                                         'bg-red-100 dark:bg-red-900/40': {{ $showHighlights['rest_zones'] ? 'true' : 'false' }} && inMinZone({{ $employee->id }}, '{{ $dateKey }}'),
@@ -179,17 +185,19 @@
                                 </td>
                             @endforeach
 
-                            <td class="border-b border-l border-gray-100 dark:border-gray-800 px-2 py-1 text-[10px] whitespace-nowrap">
-                                <div>{{ __(':hours hours', ['hours' => number_format($totalHours, 0)]) }}</div>
-                                <div class="text-gray-400">
-                                    @foreach($typeCounts as $code => $count)
-                                        {{ $code }}: {{ $count }}@if(!$loop->last) | @endif
-                                    @endforeach
-                                </div>
-                                @if($warningCount > 0)
-                                    <div class="text-amber-600">{{ __('⚠️ exceptions: :count', ['count' => $warningCount]) }}</div>
-                                @endif
-                            </td>
+                            @if($showStatsColumn)
+                                <td class="border-b border-l border-gray-100 dark:border-gray-800 px-2 py-1 text-[10px] whitespace-nowrap">
+                                    <div>{{ __(':hours hours', ['hours' => number_format($totalHours, 0)]) }}</div>
+                                    <div class="text-gray-400">
+                                        @foreach($typeCounts as $code => $count)
+                                            {{ $code }}: {{ $count }}@if(!$loop->last) | @endif
+                                        @endforeach
+                                    </div>
+                                    @if($warningCount > 0)
+                                        <div class="text-amber-600">{{ __('⚠️ exceptions: :count', ['count' => $warningCount]) }}</div>
+                                    @endif
+                                </td>
+                            @endif
                         </tr>
                     @endforeach
 
@@ -209,12 +217,14 @@
                                     }
                                 }
                             @endphp
-                            <td class="px-1 py-1 text-center
+                            <td class="border-r border-gray-200 dark:border-gray-700 px-1 py-1 text-center
                                 {{ $showHighlights['capacity'] && $deficit ? 'bg-red-200 dark:bg-red-900 text-red-700 dark:text-red-300' : '' }}">
                                 {{ $deficit ? '⚠️' : '' }}
                             </td>
                         @endforeach
-                        <td class="border-l border-gray-200 dark:border-gray-700"></td>
+                        @if($showStatsColumn)
+                            <td class="border-l border-gray-200 dark:border-gray-700"></td>
+                        @endif
                     </tr>
                 </tbody>
             </table>

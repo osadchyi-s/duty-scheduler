@@ -9,6 +9,7 @@ use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\FontProviders\LocalFontProvider;
 use App\Http\Middleware\ApplyConfiguredLocale;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -26,6 +27,9 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            // Inter font is hosted locally (public/fonts/inter + public/css/filament-fonts.css)
+            // so the app does not fetch CSS/fonts from an external CDN and works offline without timeouts.
+            ->font('Inter', url: asset('css/filament-fonts.css'), provider: LocalFontProvider::class)
             ->colors([
                 'primary' => Color::Blue,
             ])

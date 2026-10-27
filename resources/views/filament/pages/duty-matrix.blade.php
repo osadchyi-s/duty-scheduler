@@ -15,7 +15,7 @@
          }"
          class="space-y-4"
     >
-        {{-- Панель управління: місяць + тумблери підсвічування (ТЗ п.5.2.4) --}}
+        {{-- Control panel: month + highlight toggles (spec 5.2.4) --}}
         <div class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-900">
             <div class="flex items-center gap-2">
                 <label class="text-sm font-medium">{{ __('Month:') }}</label>
@@ -43,7 +43,7 @@
             </div>
         </div>
 
-        {{-- Легенда типів подій --}}
+        {{-- Event type legend --}}
         <div class="flex flex-wrap gap-3 text-xs">
             @foreach($this->eventTypes as $type)
                 <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700">
@@ -58,25 +58,28 @@
             </span>
         </div>
 
-        {{-- Матриця --}}
+        {{-- Matrix --}}
         <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-            <table class="min-w-full text-xs border-collapse">
+            {{-- table-fixed + w-full: side columns are fixed, day columns stretch evenly to fill the full width.
+                 min-width keeps horizontal scroll on narrow screens (~44px per day). --}}
+            <table class="w-full table-fixed text-xs border-collapse"
+                   style="min-width: {{ 340 + count($this->days) * 44 }}px">
                 <thead>
                     <tr>
-                        <th class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-b border-gray-200 dark:border-gray-700 px-3 py-2 text-left min-w-[180px]">
+                        <th class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-b border-gray-200 dark:border-gray-700 px-3 py-2 text-left w-[180px]">
                             {{ __('Employee') }}
                         </th>
                         @foreach($this->days as $day)
                             @php
                                 $isWeekend = $day->isWeekend();
                             @endphp
-                            <th class="border-b border-gray-200 dark:border-gray-700 px-2 py-2 text-center min-w-[44px]
+                            <th class="border-b border-gray-200 dark:border-gray-700 px-2 py-2 text-center
                                        {{ $showHighlights['weekends'] && $isWeekend ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400' : '' }}">
                                 {{ $day->format('d') }}<br>
                                 <span class="text-[10px] text-gray-400">{{ $day->translatedFormat('D') }}</span>
                             </th>
                         @endforeach
-                        <th class="border-b border-l border-gray-200 dark:border-gray-700 px-3 py-2 text-center min-w-[160px]">
+                        <th class="border-b border-l border-gray-200 dark:border-gray-700 px-3 py-2 text-center w-[160px]">
                             {{ __('Total / Statistics') }}
                         </th>
                     </tr>
@@ -182,7 +185,7 @@
                         </tr>
                     @endforeach
 
-                    {{-- Підсумковий рядок "Непризначено" з підсвічуванням дефіциту (п.5.2.3) --}}
+                    {{-- "Unassigned" summary row with staffing-deficit highlight (spec 5.2.3) --}}
                     <tr class="bg-gray-50 dark:bg-gray-800 font-medium">
                         <td class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 px-3 py-2">
                             {{ __('Unassigned ⚠️') }}
@@ -210,6 +213,6 @@
         </div>
     </div>
 
-    {{-- Модальні actions Filament (Quick Assign) --}}
+    {{-- Filament modal actions (Quick Assign) --}}
     <x-filament-actions::modals />
 </x-filament-panels::page>

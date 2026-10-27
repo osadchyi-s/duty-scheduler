@@ -1,4 +1,14 @@
 <x-filament-panels::page>
+    {{-- Explicit vertical column separators. Tailwind's border-r utility is not part of
+         Filament's precompiled CSS (the project has no Tailwind build step), so we define
+         the rules here. Colors mirror the horizontal borders in light/dark themes. --}}
+    <style>
+        .dm-vline      { border-right: 1px solid rgb(243 244 246); } /* gray-100 */
+        .dark .dm-vline{ border-right-color: rgb(31 41 55); }        /* gray-800 */
+        .dm-vline-head      { border-right: 1px solid rgb(229 231 235); } /* gray-200 */
+        .dark .dm-vline-head{ border-right-color: rgb(55 65 81); }        /* gray-700 */
+    </style>
+
     <div x-data="{
             restZone: { userId: null, minUntil: null, preferredUntil: null },
             setRest(userId, minUntil, preferredUntil) {
@@ -77,14 +87,14 @@
                    style="min-width: {{ (150 + ($showStatsColumn ? 150 : 0)) + count($this->days) * 36 }}px">
                 <thead>
                     <tr>
-                        <th class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-b border-gray-200 dark:border-gray-700 px-2 py-1.5 text-left w-[150px]">
+                        <th class="dm-vline-head sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-2 py-1.5 text-left w-[150px]">
                             {{ __('Employee') }}
                         </th>
                         @foreach($this->days as $day)
                             @php
                                 $isWeekend = $day->isWeekend();
                             @endphp
-                            <th class="border-b border-r border-gray-200 dark:border-gray-700 px-1 py-1 text-center
+                            <th class="dm-vline-head border-b border-gray-200 dark:border-gray-700 px-1 py-1 text-center
                                        {{ $showHighlights['weekends'] && $isWeekend ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400' : '' }}">
                                 {{ $day->format('d') }}<br>
                                 <span class="text-[9px] text-gray-400">{{ $day->translatedFormat('D') }}</span>
@@ -124,7 +134,7 @@
                             }
                         @endphp
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                            <td class="sticky left-0 z-10 bg-white dark:bg-gray-900 border-r border-b border-gray-200 dark:border-gray-700 px-2 py-1 font-medium whitespace-nowrap">
+                            <td class="dm-vline-head sticky left-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-2 py-1 font-medium whitespace-nowrap">
                                 {{ $employee->name }}
                                 <div class="text-[9px] text-gray-400 font-normal">{{ $employee->position }}</div>
                             </td>
@@ -135,7 +145,7 @@
                                     $dayEvents = $eventsIndex[$dateKey] ?? [];
                                     $isWeekend = $day->isWeekend();
                                 @endphp
-                                <td class="border-b border-r border-gray-100 dark:border-gray-800 p-0.5 text-center align-middle
+                                <td class="dm-vline border-b border-gray-100 dark:border-gray-800 p-0.5 text-center align-middle
                                            {{ $showHighlights['weekends'] && $isWeekend ? 'bg-red-50/50 dark:bg-red-950/20' : '' }}"
                                     :class="{
                                         'bg-red-100 dark:bg-red-900/40': {{ $showHighlights['rest_zones'] ? 'true' : 'false' }} && inMinZone({{ $employee->id }}, '{{ $dateKey }}'),
@@ -199,7 +209,7 @@
 
                     {{-- "Unassigned" summary row with staffing-deficit highlight (spec 5.2.3) --}}
                     <tr class="bg-gray-50 dark:bg-gray-800 font-medium">
-                        <td class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 px-2 py-1">
+                        <td class="dm-vline-head sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 px-2 py-1">
                             {{ __('Unassigned ⚠️') }}
                         </td>
                         @foreach($this->days as $day)
@@ -213,7 +223,7 @@
                                     }
                                 }
                             @endphp
-                            <td class="border-r border-gray-200 dark:border-gray-700 px-1 py-1 text-center
+                            <td class="dm-vline px-1 py-1 text-center
                                 {{ $showHighlights['capacity'] && $deficit ? 'bg-red-200 dark:bg-red-900 text-red-700 dark:text-red-300' : '' }}">
                                 {{ $deficit ? '⚠️' : '' }}
                             </td>

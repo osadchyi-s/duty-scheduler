@@ -50,6 +50,12 @@ class DutyMatrix extends Page implements HasForms, HasActions
     public int $selectedYear;
 
     /**
+     * Temporarily hides the "Total / Statistics" column. The column markup is kept
+     * in the view and simply not rendered while this is false; flip to true to bring it back.
+     */
+    public bool $showStatsColumn = false;
+
+    /**
      * Use the full page width (instead of the default 80rem container) so the
      * monthly duty matrix can stretch across the whole screen on wide monitors.
      */

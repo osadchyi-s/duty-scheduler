@@ -1,8 +1,4 @@
 <x-filament-panels::page>
-    {{-- Temporarily hidden: the "Total / Statistics" column is kept in the markup but not
-         rendered for now (it gets in the way). Flip this flag to true to bring it back. --}}
-    @php($showStatsColumn = false)
-
     <div x-data="{
             restZone: { userId: null, minUntil: null, preferredUntil: null },
             setRest(userId, minUntil, preferredUntil) {

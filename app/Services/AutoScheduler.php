@@ -216,7 +216,7 @@ class AutoScheduler
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
                 'status' => 'draft',
-                'has_rest_warning' => $check->status === ConstraintCheckResult::STATUS_WARNING,
+                'has_warning' => $check->status === ConstraintCheckResult::STATUS_WARNING,
                 'warning_reason' => $check->reason,
                 'note' => 'system:auto-generated',
             ]);

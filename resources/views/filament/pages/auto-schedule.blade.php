@@ -24,7 +24,7 @@
                 <div class="text-2xl font-bold text-green-600">{{ $result['createdCount'] }}</div>
             </div>
             <div class="rounded-xl border p-4 bg-white dark:bg-gray-900">
-                <div class="text-xs text-gray-400">{{ __('With rest warnings ⚠️') }}</div>
+                <div class="text-xs text-gray-400">{{ __('With warnings ⚠️') }}</div>
                 <div class="text-2xl font-bold text-amber-600">{{ $result['warningCount'] }}</div>
             </div>
             <div class="rounded-xl border p-4 bg-white dark:bg-gray-900">

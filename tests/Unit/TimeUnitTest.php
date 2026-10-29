@@ -51,3 +51,20 @@ it('treats an end at midnight as exclusive', function () {
     expect(UserEvent::lastCoveredDayFor(Carbon::parse('2026-09-01'), Carbon::parse('2026-09-03'))->toDateString())->toBe('2026-09-02')
         ->and(UserEvent::lastCoveredDayFor(Carbon::parse('2026-09-01 08:00'), Carbon::parse('2026-09-02 08:00'))->toDateString())->toBe('2026-09-02');
 });
+
+it('keeps a day at 24 hours across a DST switch in days mode', function () {
+    config(['scheduling.time_unit' => 'days']);
+
+    // Europe/Kyiv switches to summer time on 29.03.2026.
+    expect(TimeUnit::hoursBetween(Carbon::parse('2026-03-29 00:00'), Carbon::parse('2026-03-30 00:00')))->toBe(24.0);
+
+    config(['scheduling.time_unit' => 'hours']);
+    expect(TimeUnit::hoursBetween(Carbon::parse('2026-03-29 00:00'), Carbon::parse('2026-03-30 00:00')))->toBe(23.0);
+});
+
+it('formats fractional values without plural errors', function () {
+    app()->setLocale('uk');
+    config(['scheduling.time_unit' => 'days']);
+
+    expect(TimeUnit::format(36))->toBe('1.5 доби');
+});

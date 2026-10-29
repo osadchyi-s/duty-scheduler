@@ -9,6 +9,7 @@ use App\Models\UserEvent;
 use App\Services\AutoScheduler;
 use App\Services\ConstraintCheckResult;
 use App\Services\ConstraintsEngine;
+use App\Services\DutyLimitChecker;
 use App\Support\TimeUnit;
 use Carbon\Carbon;
 use Filament\Actions\Action;
@@ -287,6 +288,31 @@ class DutyMatrix extends Page implements HasForms, HasActions
         return $index;
     }
 
+    /** @var array<int, array<int, string>>|null Duty limit violations of the displayed events, per request. */
+    protected ?array $limitViolations = null;
+
+    /**
+     * Warning reasons for an event: the one stored when it was saved, plus any
+     * duty limit it currently exceeds (also for events created before the limit).
+     *
+     * @return array<int, string>
+     */
+    public function eventWarnings(UserEvent $event): array
+    {
+        $this->limitViolations ??= app(DutyLimitChecker::class)->violations(
+            $this->employees->flatMap(fn (User $user) => $user->events)
+        );
+
+        $warnings = $event->has_warning && filled($event->warning_reason) ? [$event->warning_reason] : [];
+        foreach ($this->limitViolations[$event->id] ?? [] as $reason) {
+            if (! str_contains($event->warning_reason ?? '', $reason)) {
+                $warnings[] = $reason;
+            }
+        }
+
+        return $warnings;
+    }
+
     /**
      * Coverage summary per date (for the bottom "Unassigned ⚠️" row).
      */
@@ -522,7 +548,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
             'starts_at' => $startsAt,
             'ends_at' => $endsAt,
             'status' => 'draft',
-            'has_rest_warning' => $result->status === ConstraintCheckResult::STATUS_WARNING,
+            'has_warning' => $result->status === ConstraintCheckResult::STATUS_WARNING,
             'warning_reason' => $result->reason,
             'note' => $this->persistEventNote($data['note'] ?? null),
             'created_by' => auth()->id(),
@@ -569,7 +595,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
             'event_type_id' => $eventType->id,
             'starts_at' => $startsAt,
             'ends_at' => $endsAt,
-            'has_rest_warning' => $result->status === ConstraintCheckResult::STATUS_WARNING,
+            'has_warning' => $result->status === ConstraintCheckResult::STATUS_WARNING,
             'warning_reason' => $result->reason,
             'note' => $this->persistEventNote($data['note'] ?? null),
         ]);

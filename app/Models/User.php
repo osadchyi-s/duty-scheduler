@@ -54,6 +54,11 @@ class User extends Authenticatable implements FilamentUser
             ->orWhere('user_b_id', $this->getKey());
     }
 
+    public function employeeGroups(): BelongsToMany
+    {
+        return $this->belongsToMany(EmployeeGroup::class)->withTimestamps();
+    }
+
     public function allowedEventTypes(): BelongsToMany
     {
         return $this->belongsToMany(EventType::class, 'user_event_type_permissions');

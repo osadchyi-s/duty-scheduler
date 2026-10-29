@@ -117,7 +117,7 @@ class PeriodStatistics extends Page implements HasForms
     }
 
     /**
-     * Коефіцієнт використання винятків: % змін з has_rest_warning = true.
+     * Коефіцієнт використання винятків: % змін з has_warning = true.
      */
     public function getExceptionRateProperty(): array
     {
@@ -126,7 +126,7 @@ class PeriodStatistics extends Page implements HasForms
         $total = UserEvent::whereBetween('starts_at', [$from, $to])
             ->where('status', '!=', 'cancelled')->count();
         $withWarning = UserEvent::whereBetween('starts_at', [$from, $to])
-            ->where('status', '!=', 'cancelled')->where('has_rest_warning', true)->count();
+            ->where('status', '!=', 'cancelled')->where('has_warning', true)->count();
 
         return [
             'total' => $total,

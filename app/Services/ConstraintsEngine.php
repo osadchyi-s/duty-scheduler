@@ -17,9 +17,16 @@ use Illuminate\Support\Facades\Cache;
  *   2. Ексклюзивність (is_blocking) — конфлікт з іншими подіями співробітника
  *   3. Місткість (max_capacity) на дату/зміну
  *   4. Оцінка часу відпочинку (min_rest_hours / preferred_rest_hours)
+ *
+ * Duty limits (DutyLimitChecker) are checked after capacity and before rest:
+ * a hard limit forbids the assignment, a soft one adds a warning.
  */
 class ConstraintsEngine
 {
+    public function __construct(protected DutyLimitChecker $dutyLimits)
+    {
+    }
+
     /**
      * Повна перевірка перед створенням/переміщенням події.
      *
@@ -44,7 +51,30 @@ class ConstraintsEngine
             return $result;
         }
 
-        return $this->evaluateRestPeriod($user, $eventType, $startsAt, $endsAt, $ignoreEventId);
+        $limitResult = $this->dutyLimits->check($user, $eventType, $startsAt, $endsAt, $ignoreEventId);
+        if ($limitResult && ! $limitResult->isAllowed) {
+            return $limitResult;
+        }
+
+        $restResult = $this->evaluateRestPeriod($user, $eventType, $startsAt, $endsAt, $ignoreEventId);
+
+        return $limitResult ? $this->mergeWarning($restResult, $limitResult) : $restResult;
+    }
+
+    /**
+     * Adds a soft duty-limit warning to the rest evaluation; a forbidden rest result wins.
+     */
+    protected function mergeWarning(ConstraintCheckResult $restResult, ConstraintCheckResult $limitWarning): ConstraintCheckResult
+    {
+        if (! $restResult->isAllowed) {
+            return $restResult;
+        }
+
+        $reason = $restResult->status === ConstraintCheckResult::STATUS_WARNING
+            ? $restResult->reason.' '.$limitWarning->reason
+            : $limitWarning->reason;
+
+        return ConstraintCheckResult::warning($reason, $restResult->restHours);
     }
 
     /**
@@ -165,6 +195,7 @@ class ConstraintsEngine
     /**
      * 4. Оцінка часу відпочинку відносно попередньої та наступної події співробітника.
      *    Optimal >= preferred; [min, preferred) => Warning; < min => Forbidden.
+     *    Each gap is governed by the rest rules of the event before it.
      */
     public function evaluateRestPeriod(
         User $user,
@@ -199,33 +230,53 @@ class ConstraintsEngine
         $worstStatus = ConstraintCheckResult::STATUS_OPTIMAL;
         $reason = null;
 
-        // Відпочинок ПІСЛЯ попередньої події і ДО початку нової.
+        // Rest rules apply to the period AFTER an event: the gap between two events is
+        // governed only by the earlier event's type; the later event adds no requirement.
+
+        // Rest after the previous event and before the new one.
         if ($previousEvent) {
-            $restBefore = $previousEvent->ends_at->diffInMinutes($startsAt) / 60;
+            $restBefore = TimeUnit::hoursBetween($previousEvent->ends_at, $startsAt);
+            $previousType = $previousEvent->eventType;
+            [$minRest, $preferredRest] = $this->restRules($previousType);
+            $status = $this->classifyRest($restBefore, $minRest, $preferredRest);
             [$worstStatus, $worstRestHours, $reason] = $this->pickWorst(
                 $worstStatus, $worstRestHours, $reason,
-                $this->classifyRest($restBefore, $eventType->min_rest_hours, $eventType->preferred_rest_hours),
+                $status,
                 $restBefore,
-                __('Rest after the previous event (:rest) is below the preferred amount (:preferred).', [
-                    'rest' => TimeUnit::format($restBefore),
-                    'preferred' => TimeUnit::format($eventType->preferred_rest_hours),
-                ])
+                $status === ConstraintCheckResult::STATUS_FORBIDDEN
+                    ? __('Rest after the previous event “:event” (:rest) is below the required minimum (:min).', [
+                        'event' => $previousType->name,
+                        'rest' => TimeUnit::format($restBefore),
+                        'min' => TimeUnit::format($minRest),
+                    ])
+                    : __('Rest after the previous event (:rest) is below the preferred amount (:preferred).', [
+                        'rest' => TimeUnit::format($restBefore),
+                        'preferred' => TimeUnit::format($preferredRest),
+                    ])
             );
         }
 
-        // Відпочинок МІЖ кінцем нової події і ПОЧАТКОМ наступної (перевіряємо за правилами наступної події).
+        // Rest after the new event and before the next one.
         if ($nextEvent) {
-            $restAfter = $endsAt->diffInMinutes($nextEvent->starts_at) / 60;
+            $restAfter = TimeUnit::hoursBetween($endsAt, $nextEvent->starts_at);
             $nextType = $nextEvent->eventType;
+            [$minRest, $preferredRest] = $this->restRules($eventType);
+            $status = $this->classifyRest($restAfter, $minRest, $preferredRest);
             [$worstStatus, $worstRestHours, $reason] = $this->pickWorst(
                 $worstStatus, $worstRestHours, $reason,
-                $this->classifyRest($restAfter, $nextType->min_rest_hours, $nextType->preferred_rest_hours),
+                $status,
                 $restAfter,
-                __('Rest before the next event “:event” (:rest) is below its preferred threshold (:preferred).', [
-                    'event' => $nextType->name,
-                    'rest' => TimeUnit::format($restAfter),
-                    'preferred' => TimeUnit::format($nextType->preferred_rest_hours),
-                ])
+                $status === ConstraintCheckResult::STATUS_FORBIDDEN
+                    ? __('Rest before the next event “:event” (:rest) is below the required minimum (:min).', [
+                        'event' => $nextType->name,
+                        'rest' => TimeUnit::format($restAfter),
+                        'min' => TimeUnit::format($minRest),
+                    ])
+                    : __('Rest before the next event “:event” (:rest) is below the preferred amount (:preferred).', [
+                        'event' => $nextType->name,
+                        'rest' => TimeUnit::format($restAfter),
+                        'preferred' => TimeUnit::format($preferredRest),
+                    ])
             );
         }
 
@@ -240,6 +291,16 @@ class ConstraintsEngine
             ),
             default => ConstraintCheckResult::ok($worstRestHours),
         };
+    }
+
+    /**
+     * Minimum and preferred rest required after an event of the given type.
+     *
+     * @return array{0: int, 1: int}
+     */
+    protected function restRules(EventType $earlierType): array
+    {
+        return [$earlierType->min_rest_hours, $earlierType->preferred_rest_hours];
     }
 
     protected function classifyRest(float $restHours, int $minRest, int $preferredRest): string

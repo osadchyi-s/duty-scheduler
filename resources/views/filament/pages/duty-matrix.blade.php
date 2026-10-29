@@ -127,7 +127,7 @@
                                         $totalHours += $ev->durationHours();
                                     }
                                     $typeCounts[$ev->eventType->code] = ($typeCounts[$ev->eventType->code] ?? 0) + 1;
-                                    if ($ev->has_rest_warning) {
+                                    if ($this->eventWarnings($ev) !== []) {
                                         $warningCount++;
                                     }
                                 }
@@ -160,8 +160,9 @@
                                             @endphp
                                             @php
                                                 $eventNote = $this->displayEventNote($event->note);
-                                                $eventTitle = $event->warning_reason
-                                                    ? '⚠️ ' . $event->warning_reason
+                                                $eventWarnings = $this->eventWarnings($event);
+                                                $eventTitle = $eventWarnings !== []
+                                                    ? '⚠️ ' . implode(' ', $eventWarnings)
                                                     : ($eventNote
                                                         ? __('Note: :note', ['note' => $eventNote])
                                                         : $event->eventType->name . ' (' . \App\Support\TimeUnit::formatPeriod($event->starts_at, $event->ends_at) . ')');
@@ -176,7 +177,7 @@
                                                 title="{{ $eventTitle }}"
                                             >
                                                 {{ \Illuminate\Support\Str::limit($event->eventType->name, 6, '') }}
-                                                @if($showHighlights['warnings'] && $event->has_rest_warning)
+                                                @if($showHighlights['warnings'] && $eventWarnings !== [])
                                                     <span class="absolute -top-1 -right-1">⚠️</span>
                                                 @endif
                                             </button>

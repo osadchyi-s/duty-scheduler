@@ -87,10 +87,25 @@ final class TimeUnit
     public static function format(int|float $hours): string
     {
         $value = self::toDisplay($hours);
+        // Plural rules only accept integers; fractions use the "few/many" form (2), e.g. "1.5 доби".
+        $number = is_int($value) ? $value : 2;
 
         return self::usesDays()
-            ? trans_choice(':count day|:count days', $value)
-            : trans_choice(':count hour|:count hours', $value);
+            ? trans_choice(':count day|:count days', $number, ['count' => $value])
+            : trans_choice(':count hour|:count hours', $number, ['count' => $value]);
+    }
+
+    /**
+     * Hours between two moments. In "days" mode the wall-clock difference is
+     * used, so a midnight-to-midnight day stays 24 hours across a DST switch.
+     */
+    public static function hoursBetween(Carbon $from, Carbon $to): float
+    {
+        if (self::usesDays()) {
+            return (($to->getTimestamp() + $to->getOffset()) - ($from->getTimestamp() + $from->getOffset())) / 3600;
+        }
+
+        return $from->diffInMinutes($to) / 60;
     }
 
     public static function formatStart(Carbon $startsAt): string

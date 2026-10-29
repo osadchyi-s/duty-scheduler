@@ -34,16 +34,19 @@ The `UserSeeder` creates these accounts:
 ```text
 app/
   Models/            User, EventType, UserEvent, UserEventTypePermission,
-                     Synergy, AppSetting
+                     Synergy, AppSetting, EmployeeGroup, Period, DutyLimit
   Services/
     ConstraintsEngine.php      Core assignment validation logic
     ConstraintCheckResult.php  Validation result (optimal/warning/forbidden)
     AutoScheduler.php          Automatic schedule generation
+    DutyLimitChecker.php       Duty limit checks and violations
+  Periods/                     Period types (calendar week/month, fixed, recurring)
   Support/
     TimeUnit.php               Days/hours conversion for the interface
   Policies/          Filament authorization policies
   Filament/
-    Resources/       Event types, employees (including synergies), roles
+    Resources/       Event types, employees (including synergies), roles,
+                     employee groups, periods, duty limits
     Pages/
       DutyMatrix.php            Duty matrix
       AutoSchedule.php          Automatic schedule generation
@@ -79,14 +82,23 @@ returns a `ConstraintCheckResult` with one of three statuses:
 3. **Overlapping work events** — an employee cannot be assigned overlapping
    work-time events, even when neither event type is marked as blocking.
 4. **Capacity** — the event type's `max_capacity` is not exceeded.
-5. **Rest period** — rest before and after the assignment is checked against
+5. **Duty limits** — the employee's duty days within each period window do
+   not exceed the limits of their employee groups (see
+   [Duty limits](#duty-limits)). A hard limit forbids the assignment; a soft
+   limit adds a warning.
+6. **Rest period** — rest before and after the assignment is checked against
    the neighboring work events:
    `optimal` (at least preferred rest), `warning` (between minimum and
-   preferred rest), or `forbidden` (below the minimum).
+   preferred rest), or `forbidden` (below the minimum). Rest rules apply to
+   the period after an event: the gap between two events is checked only
+   against the rules of the earlier event's type. For example, if an event
+   type requires one day of rest, the next day must be free, while the day
+   before it may be occupied.
 
 The duty matrix uses this validation when an event is assigned or edited.
-Assignments that produce a rest warning are still allowed and are saved with
-`has_rest_warning = true`, which displays a warning indicator in the matrix.
+Assignments that produce a warning (rest or soft duty limit) are still allowed
+and are saved with `has_warning = true`, which displays a warning indicator in
+the matrix.
 
 ## Features
 
@@ -118,6 +130,9 @@ Assignments that produce a rest warning are still allowed and are saved with
   A synergy can apply to selected event types or to all types when none are
   selected. The score is set with a three-state switch: negative (`-1`, red),
   neutral (`0`, gray), or positive (`1`, green).
+- Duty limits per employee group: a maximum number of duty days per employee
+  within a calendar week, a calendar month, a fixed period, or a recurring
+  period, as a hard or soft limit.
 
 ## Employee synergy
 
@@ -137,6 +152,39 @@ Better synergy can increase the candidate's selection weight by up to 100
 times, and a higher shift count for the event type lowers it. Selection is
 randomized to avoid repeatedly generating the same pairs, while permission,
 rest, capacity, and exclusivity checks still apply.
+
+## Duty limits
+
+Duty limits cap how many duty days each employee may have within a period.
+They are built from three entities, each managed on its own page by
+administrators and managers:
+
+- **Employee groups** (**People and access → Employee groups**) — named sets
+  of employees. An employee can belong to several groups.
+- **Periods** (**Scheduling rules → Periods**) — the built-in *calendar week*
+  (Monday to Sunday) and *calendar month* are always available and read-only.
+  You can add a *fixed period* (a date range) or a *recurring period* (for
+  example, 7 days every 14 days from a start date). A period used by a limit
+  cannot be deleted.
+- **Duty limits** (**Scheduling rules → Duty limits**) — a period, employee
+  groups, the maximum number of duty days per employee, and what happens when
+  it is exceeded: forbid the assignment or allow it with a warning. If no
+  event types are selected, all working event types are counted. Groups and
+  periods can also be created directly from the limit form.
+
+The limit applies to each employee of the selected groups separately, in each
+window of the period. Every applicable limit is checked, so the strictest one
+wins. An event counts as many days as it lasts, starting from its start day; a
+multi-day event is split between windows. In hours mode, a 24-hour shift
+counts for the day it starts.
+
+Limits are checked by the Constraints Engine, so they apply both to manual
+assignment and to auto-generation. The matrix also marks existing events that
+exceed a limit with ⚠️, including events created before the limit; the reason
+is shown in the tooltip.
+
+New period types are added by implementing `App\Periods\PeriodType` and
+registering the class in `App\Periods\PeriodTypes`; no migration is needed.
 
 ## Time unit: days or hours
 

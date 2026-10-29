@@ -64,3 +64,27 @@ it('shows the last covered day when editing a day-aligned event', function () {
             'ends_at' => '2026-09-07',
         ]);
 });
+
+it('highlights existing events that exceed a duty limit', function () {
+    $group = \App\Models\EmployeeGroup::create(['name' => 'Чергові']);
+    $group->users()->attach($this->employee->id);
+    $limit = \App\Models\DutyLimit::create([
+        'name' => 'Один на тиждень',
+        'period_id' => \App\Models\Period::where('type', 'calendar_week')->value('id'),
+        'max_days' => 1,
+        'severity' => 'forbidden',
+    ]);
+    $limit->groups()->attach($group->id);
+
+    foreach (['2026-09-01', '2026-09-03'] as $day) {
+        UserEvent::create([
+            'user_id' => $this->employee->id, 'event_type_id' => $this->dutyType->id,
+            'starts_at' => $day.' 00:00:00', 'ends_at' => \Carbon\Carbon::parse($day)->addDay(), 'status' => 'approved',
+        ]);
+    }
+
+    Livewire::test(DutyMatrix::class)
+        ->set('month', '2026-09')
+        ->assertSee('Перевищено ліміт чергувань «Один на тиждень»: 2 з 1 днів у періоді 31.08.2026–06.09.2026.')
+        ->assertSee('⚠️');
+});

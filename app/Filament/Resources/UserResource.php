@@ -83,6 +83,21 @@ class UserResource extends Resource
                         ->required(),
                 ]),
 
+            Forms\Components\Section::make(__('Employee groups'))
+                ->description(__('Groups this employee belongs to. Groups are used, for example, in duty limits.'))
+                ->schema([
+                    Forms\Components\Select::make('employeeGroups')
+                        ->label(__('Groups'))
+                        ->relationship('employeeGroups', 'name')
+                        ->multiple()
+                        ->preload()
+                        ->searchable()
+                        ->createOptionForm([
+                            Forms\Components\TextInput::make('name')->label(__('Name'))->required()->maxLength(255),
+                            Forms\Components\Textarea::make('description')->label(__('Description'))->rows(2),
+                        ]),
+                ]),
+
             Forms\Components\Section::make(__('Event type permissions'))
                 ->description(__('Event types and absences this employee may be assigned'))
                 ->schema([
@@ -103,10 +118,12 @@ class UserResource extends Resource
                 Tables\Columns\TextColumn::make('email')->label(__('Email'))->searchable(),
                 Tables\Columns\TextColumn::make('position')->label(__('Position')),
                 Tables\Columns\TextColumn::make('roles.name')->label(__('Roles'))->badge(),
+                Tables\Columns\TextColumn::make('employeeGroups.name')->label(__('Groups'))->badge()->color('gray'),
                 Tables\Columns\IconColumn::make('is_active')->label(__('Active'))->boolean(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('roles')->relationship('roles', 'name')->label(__('Role')),
+                Tables\Filters\SelectFilter::make('employeeGroups')->relationship('employeeGroups', 'name')->label(__('Group')),
                 Tables\Filters\TernaryFilter::make('is_active')->label(__('Active status')),
             ])
             ->actions([

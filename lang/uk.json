@@ -263,5 +263,8 @@
     "The period must lie within the displayed month.": "Період має бути в межах відображеного місяця.",
     "The period must lie within the draft month.": "Період має бути в межах місяця чернетки.",
     "Will be added or changed: :add. Will be removed from the approved schedule: :remove. Unchanged: :unchanged.": "Буде додано або змінено: :add. Буде видалено із затвердженого графіка: :remove. Без змін: :unchanged.",
-    "⚠️ Another draft of this month was approved on :date. Check the differences below.": "⚠️ Іншу чернетку цього місяця затверджено :date. Перевірте різницю нижче."
+    "⚠️ Another draft of this month was approved on :date. Check the differences below.": "⚠️ Іншу чернетку цього місяця затверджено :date. Перевірте різницю нижче.",
+    "Groups": "Групи",
+    "Group": "Група",
+    "Groups this employee belongs to. Groups are used, for example, in duty limits.": "Групи, до яких входить співробітник. Групи використовуються, наприклад, у лімітах чергувань."
 }

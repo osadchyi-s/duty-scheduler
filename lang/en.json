@@ -263,5 +263,8 @@
     "The period must lie within the displayed month.": "The period must lie within the displayed month.",
     "The period must lie within the draft month.": "The period must lie within the draft month.",
     "Will be added or changed: :add. Will be removed from the approved schedule: :remove. Unchanged: :unchanged.": "Will be added or changed: :add. Will be removed from the approved schedule: :remove. Unchanged: :unchanged.",
-    "⚠️ Another draft of this month was approved on :date. Check the differences below.": "⚠️ Another draft of this month was approved on :date. Check the differences below."
+    "⚠️ Another draft of this month was approved on :date. Check the differences below.": "⚠️ Another draft of this month was approved on :date. Check the differences below.",
+    "Groups": "Groups",
+    "Group": "Group",
+    "Groups this employee belongs to. Groups are used, for example, in duty limits.": "Groups this employee belongs to. Groups are used, for example, in duty limits."
 }

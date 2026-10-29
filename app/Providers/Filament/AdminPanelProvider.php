@@ -9,6 +9,7 @@ use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Enums\MaxWidth;
 use Filament\FontProviders\LocalFontProvider;
 use App\Filament\AvatarProviders\LocalAvatarProvider;
 use App\Http\Middleware\ApplyConfiguredLocale;
@@ -37,6 +38,9 @@ class AdminPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Blue,
             ])
+            // Use the full page width (instead of the default 80rem container) on every page,
+            // so tables such as the duty matrix, users or duty limits stretch across wide monitors.
+            ->maxContentWidth(MaxWidth::Full)
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([

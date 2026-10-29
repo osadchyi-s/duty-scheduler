@@ -127,3 +127,14 @@ it('requires at least one group for a duty limit', function () {
         ->call('create')
         ->assertHasFormErrors(['groups' => 'required']);
 });
+
+it('renders admin pages at full content width', function () {
+    $this->actingAs($this->manager);
+
+    foreach ([EmployeeGroupResource::class, DutyLimitResource::class, \App\Filament\Resources\UserResource::class, \App\Filament\Resources\EventTypeResource::class] as $resource) {
+        $this->get($resource::getUrl('index'))
+            ->assertOk()
+            ->assertSee('max-w-full', false)
+            ->assertDontSee('max-w-7xl', false);
+    }
+});

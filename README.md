@@ -114,6 +114,10 @@ the matrix.
   interactive assignment, rest-period highlighting, and staffing deficit
   indicators. Administrators and managers also see one tab per schedule
   draft of the month (see [Schedule drafts](#schedule-drafts)).
+- Inactive employees are listed in the matrix (and the export) only while
+  they still have events in the period; they are shown last, struck through
+  and marked "Inactive". New events cannot be assigned to them, neither
+  manually, by auto-generation, nor by approving a draft.
 - Period reports for workload distribution, staffing deficits, and rest
   warnings.
 - Excel export with event colors and summary columns.

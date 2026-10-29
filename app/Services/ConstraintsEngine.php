@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Cache;
 /**
  * Multi-level validation of event assignments (Duty Matrix Constraints Engine).
  *
- * The order of checks follows spec 4:
+ * The order of checks follows spec 4 (preceded by a check that the employee is active):
  *   1. Employee permission for the event type (user_event_type_permissions)
  *   2. Exclusivity (is_blocking): conflicts with the employee's other events
  *   3. Capacity (max_capacity) per date/shift
@@ -43,6 +43,10 @@ class ConstraintsEngine
         ?int $ignoreEventId = null,
         ?ScheduleDraft $draft = null,
     ): ConstraintCheckResult {
+        if ($result = $this->checkActive($user)) {
+            return $result;
+        }
+
         if ($result = $this->checkPermission($user, $eventType)) {
             return $result;
         }
@@ -79,6 +83,20 @@ class ConstraintsEngine
             : $limitWarning->reason;
 
         return ConstraintCheckResult::warning($reason, $restResult->restHours);
+    }
+
+    /**
+     * Inactive employees keep their existing events but get no new assignments.
+     */
+    protected function checkActive(User $user): ?ConstraintCheckResult
+    {
+        if (! $user->is_active) {
+            return ConstraintCheckResult::forbidden(
+                __('Employee :name is inactive and cannot be assigned events.', ['name' => $user->name])
+            );
+        }
+
+        return null;
     }
 
     /**

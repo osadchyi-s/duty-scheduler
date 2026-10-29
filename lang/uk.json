@@ -267,5 +267,9 @@
     "Groups": "Групи",
     "Group": "Група",
     "Groups this employee belongs to. Groups are used, for example, in duty limits.": "Групи, до яких входить співробітник. Групи використовуються, наприклад, у лімітах чергувань.",
-    "Staging environment — for testing only. Changes here do not affect the production schedule.": "Тестове середовище (staging) — лише для перевірки. Зміни тут не впливають на робочий графік."
+    "Staging environment — for testing only. Changes here do not affect the production schedule.": "Тестове середовище (staging) — лише для перевірки. Зміни тут не впливають на робочий графік.",
+    "Employee :name is inactive and cannot be assigned events.": "Співробітник :name неактивний, йому не можна призначати події.",
+    "Inactive employee: existing events are shown, new ones cannot be assigned.": "Неактивний співробітник: наявні події показано, нові призначати не можна.",
+    "Inactive": "Неактивний",
+    "inactive": "неактивний"
 }

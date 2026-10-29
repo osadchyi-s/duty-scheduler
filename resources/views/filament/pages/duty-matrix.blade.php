@@ -161,8 +161,14 @@
                             }
                         @endphp
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                            <td class="dm-vline-head sticky left-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-2 py-1 font-medium whitespace-nowrap">
-                                {{ $employee->name }}
+                            <td class="dm-vline-head sticky left-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-2 py-1 font-medium whitespace-nowrap"
+                                @unless($employee->is_active) title="{{ __('Inactive employee: existing events are shown, new ones cannot be assigned.') }}" @endunless
+                            >
+                                {{-- Inactive employees are listed only while they still have events in the period. --}}
+                                <span @unless($employee->is_active) style="color: rgb(156 163 175); text-decoration: line-through;" @endunless>{{ $employee->name }}</span>
+                                @unless($employee->is_active)
+                                    <span style="font-size: 9px; font-weight: 600; padding: 0 .3rem; border-radius: .25rem; color: rgb(107 114 128); background: rgb(229 231 235);">{{ __('Inactive') }}</span>
+                                @endunless
                                 <div class="text-[9px] text-gray-400 font-normal">{{ $employee->position }}</div>
                             </td>
 
@@ -199,7 +205,7 @@
                                                 @mouseenter="setRest({{ $employee->id }}, '{{ $minUntil }}', '{{ $prefUntil }}')"
                                                 @mouseleave="clearRest()"
                                                 class="w-full rounded px-0.5 py-0.5 text-white text-[9px] leading-tight relative"
-                                                style="background-color: {{ $event->eventType->color_code }};"
+                                                style="background-color: {{ $event->eventType->color_code }};{{ $employee->is_active ? '' : ' opacity: .45;' }}"
                                                 title="{{ $eventTitle }}"
                                             >
                                                 {{ \Illuminate\Support\Str::limit($event->eventType->name, 6, '') }}
@@ -208,7 +214,7 @@
                                                 @endif
                                             </button>
                                         @endforeach
-                                    @else
+                                    @elseif($employee->is_active)
                                         <button type="button"
                                             wire:click="mountAction('assign', { userId: {{ $employee->id }}, date: '{{ $dateKey }}' })"
                                             class="w-full h-5 rounded hover:bg-primary-100 dark:hover:bg-primary-900/30 text-gray-300">

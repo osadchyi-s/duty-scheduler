@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\MatrixCache;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,6 +16,20 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable implements FilamentUser
 {
     use HasFactory, Notifiable, HasRoles;
+
+    protected static function booted(): void
+    {
+        static::saved(function (User $user): void {
+            if ($user->wasChanged('is_active') || $user->wasChanged('name') || $user->wasRecentlyCreated) {
+                MatrixCache::invalidateEmployees();
+            }
+        });
+    }
+
+    /** Mirrors the database default, so a newly created model is active before it is refreshed. */
+    protected $attributes = [
+        'is_active' => true,
+    ];
 
     protected $fillable = [
         'name',

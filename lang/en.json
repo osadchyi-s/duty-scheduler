@@ -267,5 +267,9 @@
     "Groups": "Groups",
     "Group": "Group",
     "Groups this employee belongs to. Groups are used, for example, in duty limits.": "Groups this employee belongs to. Groups are used, for example, in duty limits.",
-    "Staging environment — for testing only. Changes here do not affect the production schedule.": "Staging environment — for testing only. Changes here do not affect the production schedule."
+    "Staging environment — for testing only. Changes here do not affect the production schedule.": "Staging environment — for testing only. Changes here do not affect the production schedule.",
+    "Employee :name is inactive and cannot be assigned events.": "Employee :name is inactive and cannot be assigned events.",
+    "Inactive employee: existing events are shown, new ones cannot be assigned.": "Inactive employee: existing events are shown, new ones cannot be assigned.",
+    "Inactive": "Inactive",
+    "inactive": "inactive"
 }

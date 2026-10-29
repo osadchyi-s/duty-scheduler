@@ -457,15 +457,16 @@ class DutyMatrix extends Page implements HasForms, HasActions
         $cacheKey = MatrixCache::matrixKey($this->month, $draft?->id);
 
         return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($start, $end, $draft) {
+            $eventsInPeriod = fn ($q) => $q->inScenario($draft)
+                ->where('status', '!=', 'cancelled')
+                ->overlappingPeriod($start, $end);
+
+            // Inactive employees are listed only while they still have events in the period (shown last).
             return User::query()
                 ->whereHas('roles', fn ($q) => $q->whereIn('name', ['User', 'Manager', 'Admin']))
-                ->where('is_active', true)
-                ->with(['events' => function ($q) use ($start, $end, $draft) {
-                    $q->inScenario($draft)
-                        ->where('status', '!=', 'cancelled')
-                        ->overlappingPeriod($start, $end)
-                        ->with('eventType');
-                }])
+                ->where(fn ($q) => $q->where('is_active', true)->orWhereHas('events', $eventsInPeriod))
+                ->with(['events' => fn ($q) => $eventsInPeriod($q)->with('eventType')])
+                ->orderByDesc('is_active')
                 ->orderBy('name')
                 ->get();
         });

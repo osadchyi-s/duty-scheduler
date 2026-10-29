@@ -11,9 +11,23 @@ use Illuminate\Support\Facades\Cache;
  */
 final class MatrixCache
 {
+    private const VERSION_KEY = 'wfm:matrix:version';
+
     public static function matrixKey(string $month, ?int $draftId): string
     {
-        return "wfm:matrix:{$month}".self::suffix($draftId);
+        // The version changes when the list of employees changes, which invalidates every month at once.
+        $version = (int) Cache::get(self::VERSION_KEY, 0);
+
+        return "wfm:matrix:v{$version}:{$month}".self::suffix($draftId);
+    }
+
+    /**
+     * Invalidates the cached matrix of all months and scenarios (e.g. after an
+     * employee was activated or deactivated).
+     */
+    public static function invalidateEmployees(): void
+    {
+        Cache::forever(self::VERSION_KEY, (int) Cache::get(self::VERSION_KEY, 0) + 1);
     }
 
     public static function coverageKey(string $month, ?int $draftId): string

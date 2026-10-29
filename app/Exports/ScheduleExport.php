@@ -48,19 +48,20 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
 
         $draft = $this->draftId ? ScheduleDraft::findOrFail($this->draftId) : null;
 
+        $eventsInMonth = fn ($q) => $q->inScenario($draft)
+            ->where('status', '!=', 'cancelled')
+            ->overlappingPeriod($this->monthStart, $this->monthEnd);
+
+        // Same rows as the matrix: inactive employees only while they have events in the month.
         $employees = User::whereHas('roles', fn ($q) => $q->whereIn('name', ['User', 'Manager', 'Admin']))
-            ->where('is_active', true)
-            ->with(['events' => function ($q) use ($draft) {
-                $q->inScenario($draft)
-                    ->where('status', '!=', 'cancelled')
-                    ->overlappingPeriod($this->monthStart, $this->monthEnd)
-                    ->with('eventType');
-            }])
+            ->where(fn ($q) => $q->where('is_active', true)->orWhereHas('events', $eventsInMonth))
+            ->with(['events' => fn ($q) => $eventsInMonth($q)->with('eventType')])
+            ->orderByDesc('is_active')
             ->orderBy('name')
             ->get();
 
         foreach ($employees as $rowIndex => $employee) {
-            $row = [$employee->name];
+            $row = [$employee->is_active ? $employee->name : $employee->name.' ('.__('inactive').')'];
             $totalHours = 0;
             $shiftCount = 0;
             $countedEventIds = [];

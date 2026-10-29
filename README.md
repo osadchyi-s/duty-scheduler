@@ -34,12 +34,14 @@ The `UserSeeder` creates these accounts:
 ```text
 app/
   Models/            User, EventType, UserEvent, UserEventTypePermission,
-                     Synergy, AppSetting, EmployeeGroup, Period, DutyLimit
+                     Synergy, AppSetting, EmployeeGroup, Period, DutyLimit,
+                     ScheduleDraft
   Services/
     ConstraintsEngine.php      Core assignment validation logic
     ConstraintCheckResult.php  Validation result (optimal/warning/forbidden)
     AutoScheduler.php          Automatic schedule generation
     DutyLimitChecker.php       Duty limit checks and violations
+    ScheduleDraftService.php   Schedule drafts: create, duplicate, approve
   Periods/                     Period types (calendar week/month, fixed, recurring)
   Support/
     TimeUnit.php               Days/hours conversion for the interface
@@ -107,25 +109,23 @@ the matrix.
 - Event types and employee permissions, including event capacity, blocking,
   work-time, and rest-period settings.
 - A monthly duty matrix with event-type colors, weekend highlighting,
-  interactive assignment, rest-period highlighting, staffing deficit
-  indicators, and draft events marked with stripes and a `D`.
+  interactive assignment, rest-period highlighting, and staffing deficit
+  indicators. Administrators and managers also see one tab per schedule
+  draft of the month (see [Schedule drafts](#schedule-drafts)).
 - Period reports for workload distribution, staffing deficits, and rest
   warnings.
 - Excel export with event colors and summary columns.
 - Redis caching for the matrix, event types, and staffing coverage, with cache
   invalidation when assignments change.
-- Automatic schedule generation for a selected date range and event types.
-  The default period is a month; when launched from the matrix, its displayed
-  month is preselected. The scheduler balances workload, validates candidates
-  through the Constraints Engine, and creates assignments as `draft` events.
+- Automatic schedule generation for a period within one month and selected
+  event types. It always generates into a schedule draft (a new one or an
+  existing one), never directly into the approved schedule. The scheduler
+  balances workload and validates candidates through the Constraints Engine.
   Any unfilled slots are reported for manual review.
-- Three modes for handling existing assignments during auto-generation:
-  fill missing slots while preserving existing assignments; delete and
-  regenerate selected drafts only; or delete and regenerate all active
-  assignments of the selected event types in the period. Delete modes require
-  confirmation and do not delete cancelled events.
-- Managers and administrators can approve an individual draft or approve all
-  drafts displayed in the current matrix month.
+- Two modes for handling existing assignments in the draft: fill missing
+  slots while preserving existing assignments, or delete and regenerate the
+  assignments of the selected event types in the period. Cancelled events are
+  not deleted.
 - Employee synergy scores that apply to a pair in both employees' profiles.
   A synergy can apply to selected event types or to all types when none are
   selected. The score is set with a three-state switch: negative (`-1`, red),
@@ -152,6 +152,45 @@ Better synergy can increase the candidate's selection weight by up to 100
 times, and a higher shift count for the event type lowers it. Selection is
 randomized to avoid repeatedly generating the same pairs, while permission,
 rest, capacity, and exclusivity checks still apply.
+
+## Schedule drafts
+
+Several versions of a month's schedule can be prepared side by side. In the
+duty matrix, administrators and managers see the **Approved schedule** tab and
+one tab per draft of the displayed month. Regular employees see only the
+approved schedule.
+
+- **New draft** copies the approved events of the month (including events
+  that cross the month boundary) into a new draft.
+- **Auto-generation** in the approved schedule tab creates a new draft and
+  generates into it; in a draft tab it generates into that draft. Generating
+  one draft at a time keeps the load low; there is no limit on the number of
+  drafts.
+- Draft events are edited in the matrix like approved ones. Every check (rest,
+  overlaps, capacity, duty limits) runs against the draft's events plus the
+  approved events outside the drafted month, so rules across the month
+  boundary still apply.
+- The **Draft** menu renames, duplicates, or deletes a draft. **Clear draft**
+  removes all its events. Export to Excel exports the current tab.
+- **Approve draft** replaces the approved events of the month whose types are
+  included in auto-generation (`is_schedulable`) with the draft's events.
+  Other events, such as vacations or sick leave, always stay. Approved events
+  that the draft does not contain are listed, and you can keep any of them.
+  Every new event is validated against the resulting schedule; if any
+  assignment is forbidden, nothing is changed and the problems are listed.
+- After approval, the other drafts of the month are marked **Stale**. They
+  are kept and can be approved later; the approval form then shows the
+  differences from the current schedule.
+
+Drafts are stored in the `schedule_drafts` table; their events are rows in
+`user_events` with `schedule_draft_id` set (`NULL` means the approved schedule)
+and `source_event_id` pointing to the approved event they were copied from.
+Drafts do not expire. The `2026_10_31_000002_move_draft_events_into_schedule_drafts`
+migration moves events with the former `draft` status into a "Migrated drafts"
+draft of their month. Statistics are based on the approved schedule only.
+
+Event types and employees that have events cannot be deleted; deactivate them
+instead, so the schedule history is preserved.
 
 ## Duty limits
 

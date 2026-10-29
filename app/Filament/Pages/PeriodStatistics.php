@@ -13,7 +13,7 @@ use Filament\Forms\Form;
 use Filament\Pages\Page;
 
 /**
- * Analytics report for an arbitrary period (spec 6.2).
+ * Analytics report for an arbitrary period (spec 6.2), based on the approved schedule only.
  */
 class PeriodStatistics extends Page implements HasForms
 {
@@ -71,6 +71,7 @@ class PeriodStatistics extends Page implements HasForms
         [$from, $to] = $this->bounds();
 
         $events = UserEvent::query()
+            ->inScenario(null)
             ->where('status', '!=', 'cancelled')
             ->whereBetween('starts_at', [$from, $to])
             ->with(['user', 'eventType'])
@@ -97,6 +98,7 @@ class PeriodStatistics extends Page implements HasForms
         for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
             foreach ($eventTypes as $type) {
                 $count = UserEvent::query()
+                    ->inScenario(null)
                     ->where('event_type_id', $type->id)
                     ->where('status', '!=', 'cancelled')
                     ->overlappingPeriod($d->copy()->startOfDay(), $d->copy()->endOfDay())
@@ -123,9 +125,9 @@ class PeriodStatistics extends Page implements HasForms
     {
         [$from, $to] = $this->bounds();
 
-        $total = UserEvent::whereBetween('starts_at', [$from, $to])
+        $total = UserEvent::inScenario(null)->whereBetween('starts_at', [$from, $to])
             ->where('status', '!=', 'cancelled')->count();
-        $withWarning = UserEvent::whereBetween('starts_at', [$from, $to])
+        $withWarning = UserEvent::inScenario(null)->whereBetween('starts_at', [$from, $to])
             ->where('status', '!=', 'cancelled')->where('has_warning', true)->count();
 
         return [

@@ -54,7 +54,7 @@ it('prefills dates and stores an inclusive end date as the next midnight', funct
 it('shows the last covered day when editing a day-aligned event', function () {
     $event = UserEvent::create([
         'user_id' => $this->employee->id, 'event_type_id' => $this->dutyType->id,
-        'starts_at' => '2026-09-05 00:00:00', 'ends_at' => '2026-09-08 00:00:00', 'status' => 'draft',
+        'starts_at' => '2026-09-05 00:00:00', 'ends_at' => '2026-09-08 00:00:00', 'status' => 'approved',
     ]);
 
     Livewire::test(DutyMatrix::class)

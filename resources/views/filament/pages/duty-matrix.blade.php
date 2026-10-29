@@ -25,6 +25,38 @@
          }"
          class="space-y-4"
     >
+        {{-- Tabs: the approved schedule and the drafts of the month (Admin / Manager only) --}}
+        @if($this->canManageDrafts())
+            <div class="flex flex-wrap items-center gap-3">
+                <x-filament::tabs>
+                    <x-filament::tabs.item
+                        :active="$this->draft === null"
+                        icon="heroicon-o-check-badge"
+                        wire:click="selectDraft(null)"
+                    >
+                        {{ __('Approved schedule') }}
+                    </x-filament::tabs.item>
+                    @foreach($this->drafts as $tabDraft)
+                        <x-filament::tabs.item
+                            :active="$this->draft?->id === $tabDraft->id"
+                            icon="heroicon-o-pencil-square"
+                            wire:click="selectDraft({{ $tabDraft->id }})"
+                            :badge="$tabDraft->isStale() ? __('Stale') : ($tabDraft->approved_at ? __('Approved') : null)"
+                            :badge-color="$tabDraft->isStale() ? 'warning' : 'success'"
+                            :badge-tooltip="$tabDraft->isStale()
+                                ? __('Another draft was approved on :date', ['date' => $tabDraft->stale_at->format('d.m.Y H:i')])
+                                : ($tabDraft->approved_at ? __('Approved on :date', ['date' => $tabDraft->approved_at->format('d.m.Y H:i')]) : null)"
+                        >
+                            {{ $tabDraft->name }}
+                        </x-filament::tabs.item>
+                    @endforeach
+                </x-filament::tabs>
+                <x-filament::button size="sm" color="gray" icon="heroicon-m-plus" wire:click="createDraft">
+                    {{ __('New draft') }}
+                </x-filament::button>
+            </div>
+        @endif
+
         {{-- Control panel: month + highlight toggles (spec 5.2.4) --}}
         <div class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-900">
             {{-- Native <select> controls instead of <input type="month">, which Firefox does not support. --}}
@@ -72,11 +104,6 @@
                     {{ $type->name }}
                 </span>
             @endforeach
-            <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700">
-                <span class="w-3 h-3 rounded-sm border border-dashed border-gray-500 inline-block"
-                      style="background-image: repeating-linear-gradient(135deg, rgba(100,100,100,.5) 0 2px, transparent 2px 4px)"></span>
-                {{ __('Draft') }}
-            </span>
         </div>
 
         {{-- Matrix --}}
@@ -166,14 +193,13 @@
                                                     : ($eventNote
                                                         ? __('Note: :note', ['note' => $eventNote])
                                                         : $event->eventType->name . ' (' . \App\Support\TimeUnit::formatPeriod($event->starts_at, $event->ends_at) . ')');
-                                                    $eventTitle = ($event->status === 'draft' ? __('Draft — ') : __('Approved — ')) . $eventTitle;
                                                 @endphp
                                             <button type="button"
                                                 wire:click="mountAction('assign', { userId: {{ $employee->id }}, date: '{{ $dateKey }}', eventId: {{ $event->id }} })"
                                                 @mouseenter="setRest({{ $employee->id }}, '{{ $minUntil }}', '{{ $prefUntil }}')"
                                                 @mouseleave="clearRest()"
-                                                class="w-full rounded px-0.5 py-0.5 text-white text-[9px] leading-tight relative {{ $event->status === 'draft' ? 'border border-dashed border-white/80' : '' }}"
-                                                style="background-color: {{ $event->eventType->color_code }}; {{ $event->status === 'draft' ? 'background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.35) 0 3px, transparent 3px 7px);' : '' }}"
+                                                class="w-full rounded px-0.5 py-0.5 text-white text-[9px] leading-tight relative"
+                                                style="background-color: {{ $event->eventType->color_code }};"
                                                 title="{{ $eventTitle }}"
                                             >
                                                 {{ \Illuminate\Support\Str::limit($event->eventType->name, 6, '') }}

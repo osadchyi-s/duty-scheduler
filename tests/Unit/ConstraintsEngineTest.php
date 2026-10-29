@@ -102,7 +102,7 @@ it('forbids overlapping work events even when neither event type is blocking', f
         'event_type_id' => $this->dutyType->id,
         'starts_at' => Carbon::parse('2026-12-08 08:00'),
         'ends_at' => Carbon::parse('2026-12-09 08:00'),
-        'status' => 'draft',
+        'status' => 'approved',
     ]);
 
     $result = $this->engine->validate(
@@ -126,7 +126,7 @@ it('applies the minimum rest of the previous event type to the next assignment',
     UserEvent::create([
         'user_id' => $this->user->id, 'event_type_id' => $this->dutyType->id,
         'starts_at' => Carbon::parse('2026-03-06 00:00'), 'ends_at' => Carbon::parse('2026-03-07 00:00'),
-        'status' => 'draft',
+        'status' => 'approved',
     ]);
 
     // The day shift itself needs no rest, but the duty before it requires 24 hours.
@@ -149,7 +149,7 @@ it('applies the minimum rest of a new event type before an existing next event',
     UserEvent::create([
         'user_id' => $this->user->id, 'event_type_id' => $dayShift->id,
         'starts_at' => Carbon::parse('2026-03-07 00:00'), 'ends_at' => Carbon::parse('2026-03-08 00:00'),
-        'status' => 'draft',
+        'status' => 'approved',
     ]);
 
     $result = $this->engine->validate(
@@ -170,7 +170,7 @@ it('does not require the rest of an event type before that event', function () {
     $dayShiftEvent = UserEvent::create([
         'user_id' => $this->user->id, 'event_type_id' => $dayShift->id,
         'starts_at' => Carbon::parse('2026-03-06 00:00'), 'ends_at' => Carbon::parse('2026-03-07 00:00'),
-        'status' => 'draft',
+        'status' => 'approved',
     ]);
 
     // A duty right after a shift without rest rules is fine: the duty's rest applies only after it.
@@ -183,7 +183,7 @@ it('does not require the rest of an event type before that event', function () {
     UserEvent::create([
         'user_id' => $this->user->id, 'event_type_id' => $this->dutyType->id,
         'starts_at' => Carbon::parse('2026-03-07 00:00'), 'ends_at' => Carbon::parse('2026-03-08 00:00'),
-        'status' => 'draft',
+        'status' => 'approved',
     ]);
 
     $shiftBeforeDuty = $this->engine->validate(

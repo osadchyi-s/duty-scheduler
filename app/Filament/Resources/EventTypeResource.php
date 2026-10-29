@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Actions\DeleteAllowedBulkAction;
 use App\Filament\Resources\EventTypeResource\Pages;
 use App\Models\EventType;
 use App\Models\User;
@@ -200,7 +201,7 @@ class EventTypeResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    DeleteAllowedBulkAction::make(),
                 ]),
             ]);
     }

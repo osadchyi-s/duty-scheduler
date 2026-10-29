@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\EventType;
+use App\Models\ScheduleDraft;
 use App\Models\User;
 use App\Support\TimeUnit;
 use Carbon\Carbon;
@@ -24,7 +25,10 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
 
     protected array $eventCellColors = [];
 
-    public function __construct(protected string $month)
+    /**
+     * @param  int|null  $draftId  schedule draft to export; null exports the approved schedule
+     */
+    public function __construct(protected string $month, protected ?int $draftId = null)
     {
         $this->monthStart = Carbon::createFromFormat('!Y-m', $month)->startOfMonth();
         $this->monthEnd = $this->monthStart->copy()->endOfMonth();
@@ -42,10 +46,13 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
         $header[] = __('Shifts');
         $rows[] = $header;
 
+        $draft = $this->draftId ? ScheduleDraft::findOrFail($this->draftId) : null;
+
         $employees = User::whereHas('roles', fn ($q) => $q->whereIn('name', ['User', 'Manager', 'Admin']))
             ->where('is_active', true)
-            ->with(['events' => function ($q) {
-                $q->where('status', '!=', 'cancelled')
+            ->with(['events' => function ($q) use ($draft) {
+                $q->inScenario($draft)
+                    ->where('status', '!=', 'cancelled')
                     ->overlappingPeriod($this->monthStart, $this->monthEnd)
                     ->with('eventType');
             }])

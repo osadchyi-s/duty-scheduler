@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,7 +12,13 @@ class UserEvent extends Model
 {
     use HasFactory;
 
+    protected $attributes = [
+        'status' => 'approved',
+    ];
+
     protected $fillable = [
+        'schedule_draft_id',
+        'source_event_id',
         'user_id',
         'event_type_id',
         'starts_at',
@@ -40,6 +47,11 @@ class UserEvent extends Model
     public function eventType(): BelongsTo
     {
         return $this->belongsTo(EventType::class);
+    }
+
+    public function draft(): BelongsTo
+    {
+        return $this->belongsTo(ScheduleDraft::class, 'schedule_draft_id');
     }
 
     public function creator(): BelongsTo
@@ -93,9 +105,25 @@ class UserEvent extends Model
         return $lastDay;
     }
 
-    public function scopeApproved($query)
+    /**
+     * Events visible in a scenario. Without a draft: the approved schedule.
+     * With a draft: the draft's own events plus approved events outside the
+     * drafted month (those inside it were copied into the draft), so rest
+     * periods and duty limits across the month boundary are still checked.
+     */
+    public function scopeInScenario(Builder $query, ?ScheduleDraft $draft): Builder
     {
-        return $query->where('status', 'approved');
+        if ($draft === null) {
+            return $query->whereNull('schedule_draft_id');
+        }
+
+        [$from, $to] = $draft->window();
+
+        return $query->where(fn (Builder $scenario) => $scenario
+            ->where('schedule_draft_id', $draft->id)
+            ->orWhere(fn (Builder $approved) => $approved
+                ->whereNull('schedule_draft_id')
+                ->where(fn (Builder $outside) => $outside->where('ends_at', '<=', $from)->orWhere('starts_at', '>=', $to))));
     }
 
     public function scopeOverlappingPeriod($query, $from, $to)

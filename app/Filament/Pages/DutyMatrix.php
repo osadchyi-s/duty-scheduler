@@ -3,16 +3,21 @@
 namespace App\Filament\Pages;
 
 use App\Models\AppSetting;
+use App\Exports\ScheduleExport;
 use App\Models\EventType;
+use App\Models\ScheduleDraft;
 use App\Models\User;
 use App\Models\UserEvent;
 use App\Services\AutoScheduler;
 use App\Services\ConstraintCheckResult;
 use App\Services\ConstraintsEngine;
 use App\Services\DutyLimitChecker;
+use App\Services\ScheduleDraftService;
+use App\Support\MatrixCache;
 use App\Support\TimeUnit;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Forms;
@@ -23,9 +28,16 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Url;
+use Maatwebsite\Excel\Facades\Excel;
 
 /**
  * "Duty Matrix" module — the main workspace for the dispatcher/manager (spec 5).
+ *
+ * The first tab shows the approved schedule; administrators and managers also
+ * get one tab per schedule draft of the month (see ScheduleDraftService).
  */
 class DutyMatrix extends Page implements HasForms, HasActions
 {
@@ -49,6 +61,15 @@ class DutyMatrix extends Page implements HasForms, HasActions
     public int $selectedMonth;
 
     public int $selectedYear;
+
+    /** Selected schedule draft; null shows the approved schedule. Kept in the URL as ?draft=. */
+    #[Url(as: 'draft')]
+    public ?int $draftId = null;
+
+    protected ?ScheduleDraft $resolvedDraft = null;
+
+    /** Draft id the cached draft was resolved for; false when not resolved yet. */
+    protected int|false|null $draftResolvedFor = false;
 
     /**
      * Temporarily hides the "Total / Statistics" column. The column markup is kept
@@ -112,42 +133,78 @@ class DutyMatrix extends Page implements HasForms, HasActions
     {
         return [
             Action::make('auto_schedule')
-                ->label(__('Schedule auto-generation'))
+                ->label(fn (): string => $this->draft ? __('Auto-generate in this draft') : __('Auto-generate a new draft'))
                 ->icon('heroicon-o-sparkles')
                 ->color('gray')
-                ->visible(fn () => auth()->user()?->hasRole(['Admin', 'Manager']) ?? false)
-                ->form(AutoSchedule::formSchema())
-                ->fillForm(fn () => AutoSchedule::defaultFormData($this->month))
-                ->requiresConfirmation()
+                ->visible(fn (): bool => $this->canManageDrafts())
+                ->form(AutoSchedule::formSchema(withDraftSelect: false))
+                ->fillForm(fn (): array => AutoSchedule::defaultFormData($this->month))
                 ->modalHeading(__('Schedule auto-generation'))
-                ->modalDescription(__('Creates drafts. Reassignment mode may delete existing events of the selected types in this period.'))
+                ->modalDescription(fn (): string => $this->draft
+                    ? __('Assignments are generated into the draft “:name”. The approved schedule does not change.', ['name' => $this->draft->name])
+                    : __('A new draft of the month is created and assignments are generated into it. The approved schedule does not change.'))
                 ->modalSubmitActionLabel(__('Generate schedule'))
-                ->action(function (array $data, AutoScheduler $scheduler): void {
-                    $result = AutoSchedule::generateResult($data, $scheduler);
-                    AutoSchedule::sendResultNotification($result);
-                    $this->flushMatrixCachesForRange(
-                        Carbon::parse($data['from'])->startOfDay(),
-                        Carbon::parse($data['to'])->endOfDay(),
-                    );
-                }),
-            Action::make('approve_month')
-                ->label(__('Approve month\'s drafts'))
+                ->action(fn (array $data, AutoScheduler $scheduler, ScheduleDraftService $drafts) => $this->autoGenerate($data, $scheduler, $drafts)),
+            Action::make('approve_draft')
+                ->label(__('Approve draft'))
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
-                ->visible(fn () => auth()->user()?->hasRole(['Admin', 'Manager']) ?? false)
-                ->requiresConfirmation()
-                ->modalHeading(__('Approve all drafts for the month?'))
-                ->modalDescription(__('All drafts shown in the current month will be changed to “Approved”.'))
+                ->visible(fn (): bool => $this->draft !== null && (auth()->user()?->can('approve', $this->draft) ?? false))
+                ->modalHeading(fn (): string => __('Approve the draft “:name”?', ['name' => $this->draft?->name]))
                 ->modalSubmitActionLabel(__('Approve'))
-                ->action(fn () => $this->approveCurrentMonthDrafts()),
+                ->form(fn (): array => $this->approvalFormSchema())
+                ->action(fn (array $data, ScheduleDraftService $drafts) => $this->approveDraft($data, $drafts)),
+            ActionGroup::make([
+                Action::make('rename_draft')
+                    ->label(__('Rename'))
+                    ->icon('heroicon-o-pencil-square')
+                    ->form([
+                        Forms\Components\TextInput::make('name')->label(__('Name'))->required()->maxLength(255),
+                    ])
+                    ->fillForm(fn (): array => ['name' => $this->draft?->name])
+                    ->action(function (array $data): void {
+                        $this->authorizeDraft('update');
+                        $this->draft->update(['name' => $data['name']]);
+                        Notification::make()->title(__('Draft renamed'))->success()->send();
+                    }),
+                Action::make('duplicate_draft')
+                    ->label(__('Duplicate'))
+                    ->icon('heroicon-o-document-duplicate')
+                    ->action(function (ScheduleDraftService $drafts): void {
+                        $this->authorizeDraft('create');
+                        $copy = $drafts->duplicate($this->draft, auth()->user());
+                        $this->selectDraft($copy->id);
+                        Notification::make()->title(__('Draft duplicated'))->success()->send();
+                    }),
+                Action::make('delete_draft')
+                    ->label(__('Delete draft'))
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (): string => __('Delete the draft “:name”?', ['name' => $this->draft?->name]))
+                    ->modalDescription(__('The draft and all its events are deleted. The approved schedule does not change.'))
+                    ->action(function (): void {
+                        $this->authorizeDraft('delete');
+                        $this->draft->delete();
+                        $this->selectDraft(null);
+                        Notification::make()->title(__('Draft deleted'))->success()->send();
+                    }),
+            ])
+                ->label(__('Draft'))
+                ->icon('heroicon-m-ellipsis-vertical')
+                ->button()
+                ->color('gray')
+                ->visible(fn (): bool => $this->draft !== null),
             Action::make('clear_month')
-                ->label(__('Clear month'))
+                ->label(fn (): string => $this->draft ? __('Clear draft') : __('Clear month'))
                 ->icon('heroicon-o-trash')
                 ->color('danger')
-                ->visible(fn () => auth()->user()?->hasRole('Admin') ?? false)
+                ->visible(fn (): bool => $this->draft ? $this->canManageDrafts() : (auth()->user()?->hasRole('Admin') ?? false))
                 ->requiresConfirmation()
-                ->modalHeading(__('Clear the current month?'))
-                ->modalDescription(__('This permanently deletes all active events in the current month. This changes the schedule and cannot be undone. Continue?'))
+                ->modalHeading(fn (): string => $this->draft ? __('Clear the draft?') : __('Clear the current month?'))
+                ->modalDescription(fn (): string => $this->draft
+                    ? __('All events of this draft are deleted. The approved schedule does not change.')
+                    : __('This permanently deletes all active events in the current month. This changes the schedule and cannot be undone. Continue?'))
                 ->action(function (): void {
                     $this->clearCurrentMonth();
                 }),
@@ -155,11 +212,170 @@ class DutyMatrix extends Page implements HasForms, HasActions
                 ->label(__('Export to Excel'))
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('success')
-                ->action(fn () => \Maatwebsite\Excel\Facades\Excel::download(
-                    new \App\Exports\ScheduleExport($this->month),
-                    "duty-matrix-{$this->month}.xlsx"
+                ->action(fn () => Excel::download(
+                    new ScheduleExport($this->month, $this->draft?->id),
+                    'duty-matrix-'.$this->month.($this->draft ? '-'.Str::slug($this->draft->name) : '').'.xlsx'
                 )),
         ];
+    }
+
+    public function canManageDrafts(): bool
+    {
+        return auth()->user()?->can('viewAny', ScheduleDraft::class) ?? false;
+    }
+
+    /**
+     * The selected draft of the displayed month, or null for the approved schedule.
+     */
+    public function getDraftProperty(): ?ScheduleDraft
+    {
+        if ($this->draftResolvedFor !== $this->draftId) {
+            $this->resolvedDraft = $this->draftId !== null && $this->canManageDrafts()
+                ? ScheduleDraft::query()->forMonth($this->periodBounds()[0])->find($this->draftId)
+                : null;
+            $this->draftResolvedFor = $this->draftId;
+        }
+
+        return $this->resolvedDraft;
+    }
+
+    /**
+     * Drafts of the displayed month, shown as tabs.
+     *
+     * @return Collection<int, ScheduleDraft>
+     */
+    public function getDraftsProperty(): Collection
+    {
+        if (! $this->canManageDrafts()) {
+            return collect();
+        }
+
+        return ScheduleDraft::query()->forMonth($this->periodBounds()[0])->orderBy('id')->get();
+    }
+
+    public function selectDraft(?int $draftId): void
+    {
+        $this->draftId = $draftId;
+        $this->limitViolations = null;
+    }
+
+    public function createDraft(ScheduleDraftService $drafts): void
+    {
+        abort_unless(auth()->user()?->can('create', ScheduleDraft::class), 403);
+
+        $draft = $drafts->create($this->periodBounds()[0], auth()->user());
+        $this->selectDraft($draft->id);
+
+        Notification::make()
+            ->title(__('Draft created'))
+            ->body(__('The approved events of the month were copied into the draft.'))
+            ->success()
+            ->send();
+    }
+
+    protected function authorizeDraft(string $ability): void
+    {
+        abort_unless($this->draft && (auth()->user()?->can($ability, $ability === 'create' ? ScheduleDraft::class : $this->draft) ?? false), 403);
+    }
+
+    protected function autoGenerate(array $data, AutoScheduler $scheduler, ScheduleDraftService $drafts): void
+    {
+        abort_unless($this->canManageDrafts(), 403);
+
+        if (Carbon::parse($data['from'])->format('Y-m') !== $this->month || Carbon::parse($data['to'])->format('Y-m') !== $this->month) {
+            Notification::make()
+                ->title(__('Auto-generation was not started'))
+                ->body(__('The period must lie within the displayed month.'))
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        try {
+            $draft = $this->draft ?? $drafts->create($this->periodBounds()[0], auth()->user());
+            $result = AutoSchedule::generateResult($data, $scheduler, $drafts, $draft);
+        } catch (ValidationException $exception) {
+            Notification::make()
+                ->title(__('Auto-generation was not started'))
+                ->body(collect($exception->errors())->flatten()->first())
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        AutoSchedule::sendResultNotification($result);
+        $this->selectDraft($draft->id);
+    }
+
+    /**
+     * Approval modal: summary of the changes and the approved events the draft
+     * does not contain, which the user may keep.
+     */
+    protected function approvalFormSchema(): array
+    {
+        $draft = $this->draft;
+        if ($draft === null) {
+            return [];
+        }
+
+        $plan = app(ScheduleDraftService::class)->approvalPlan($draft);
+        $summary = __('Will be added or changed: :add. Will be removed from the approved schedule: :remove. Unchanged: :unchanged.', [
+            'add' => $plan['add']->count(),
+            'remove' => $plan['remove']->count(),
+            'unchanged' => $plan['unchanged']->count(),
+        ]);
+
+        return array_filter([
+            $draft->isStale()
+                ? Forms\Components\Placeholder::make('stale_notice')
+                    ->label('')
+                    ->content(__('⚠️ Another draft of this month was approved on :date. Check the differences below.', ['date' => $draft->stale_at->format('d.m.Y H:i')]))
+                : null,
+            Forms\Components\Placeholder::make('summary')
+                ->label(__('Changes'))
+                ->content($summary.' '.__('Only event types included in auto-generation are replaced; other events (vacations, sick leave, ...) stay as they are.')),
+            $plan['remove']->isNotEmpty()
+                ? Forms\Components\CheckboxList::make('keep_event_ids')
+                    ->label(__('Approved events missing from the draft'))
+                    ->helperText(__('Selected events stay in the approved schedule; the others are removed.'))
+                    ->options($plan['remove']->mapWithKeys(fn (UserEvent $event): array => [
+                        $event->id => $event->user->name.' — '.$event->eventType->name.' ('.TimeUnit::formatPeriod($event->starts_at, $event->ends_at).')',
+                    ])->all())
+                    ->columns(1)
+                : null,
+        ]);
+    }
+
+    protected function approveDraft(array $data, ScheduleDraftService $drafts): void
+    {
+        $this->authorizeDraft('approve');
+
+        try {
+            $drafts->approve($this->draft, $data['keep_event_ids'] ?? [], auth()->user());
+        } catch (ValidationException $exception) {
+            $problems = collect($exception->errors())->flatten();
+
+            Notification::make()
+                ->title(__('The draft was not approved'))
+                ->body(__('Some assignments break the rules in the approved schedule. Fix them in the draft and try again.')
+                    ."\n".$problems->take(10)->implode("\n")
+                    .($problems->count() > 10 ? "\n…" : ''))
+                ->danger()
+                ->persistent()
+                ->send();
+
+            return;
+        }
+
+        $this->selectDraft(null);
+
+        Notification::make()
+            ->title(__('Draft approved'))
+            ->body(__('The approved schedule of the month was updated. Other drafts of the month are marked as stale.'))
+            ->success()
+            ->send();
     }
 
     public function updatedMonth(): void
@@ -181,6 +397,8 @@ class DutyMatrix extends Page implements HasForms, HasActions
     protected function syncMonthFromParts(): void
     {
         $this->month = sprintf('%04d-%02d', $this->selectedYear, $this->selectedMonth);
+        // Drafts belong to one month, so another month starts on the approved schedule.
+        $this->selectDraft(null);
     }
 
     /** Localized month options (1 => January, ...) for the month <select>. */
@@ -235,14 +453,16 @@ class DutyMatrix extends Page implements HasForms, HasActions
     public function getEmployeesProperty(): Collection
     {
         [$start, $end] = $this->periodBounds();
-        $cacheKey = "wfm:matrix:{$this->month}";
+        $draft = $this->draft;
+        $cacheKey = MatrixCache::matrixKey($this->month, $draft?->id);
 
-        return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($start, $end) {
+        return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($start, $end, $draft) {
             return User::query()
                 ->whereHas('roles', fn ($q) => $q->whereIn('name', ['User', 'Manager', 'Admin']))
                 ->where('is_active', true)
-                ->with(['events' => function ($q) use ($start, $end) {
-                    $q->where('status', '!=', 'cancelled')
+                ->with(['events' => function ($q) use ($start, $end, $draft) {
+                    $q->inScenario($draft)
+                        ->where('status', '!=', 'cancelled')
                         ->overlappingPeriod($start, $end)
                         ->with('eventType');
                 }])
@@ -290,7 +510,8 @@ class DutyMatrix extends Page implements HasForms, HasActions
     public function eventWarnings(UserEvent $event): array
     {
         $this->limitViolations ??= app(DutyLimitChecker::class)->violations(
-            $this->employees->flatMap(fn (User $user) => $user->events)
+            $this->employees->flatMap(fn (User $user) => $user->events),
+            $this->draft,
         );
 
         $warnings = $event->has_warning && filled($event->warning_reason) ? [$event->warning_reason] : [];
@@ -311,7 +532,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
         [$start, $end] = $this->periodBounds();
         $engine = app(ConstraintsEngine::class);
 
-        return $engine->monthlyCoverage($start, $end);
+        return $engine->monthlyCoverage($start, $end, $this->draft);
     }
 
     public function isUnderStaffed(Carbon $date, EventType $eventType): bool
@@ -368,17 +589,6 @@ class DutyMatrix extends Page implements HasForms, HasActions
                     ->label(__('Note'))
                     ->rows(2),
                 Forms\Components\Actions::make([
-                    Forms\Components\Actions\Action::make('approve_event')
-                        ->label(__('Approve draft'))
-                        ->color('success')
-                        ->icon('heroicon-o-check-circle')
-                        ->visible(fn (Forms\Get $get): bool => filled($get('event_id'))
-                            && UserEvent::whereKey($get('event_id'))->where('status', 'draft')->exists()
-                            && (auth()->user()?->hasRole(['Admin', 'Manager']) ?? false))
-                        ->requiresConfirmation()
-                        ->action(function (Forms\Get $get): void {
-                            $this->approveEvent((int) $get('event_id'));
-                        }),
                     Forms\Components\Actions\Action::make('delete_event')
                         ->label(__('Delete'))
                         ->color('danger')
@@ -398,7 +608,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
             ->fillForm(function (array $arguments) {
                 $eventId = $arguments['eventId'] ?? null;
                 $date = $arguments['date'] ?? null;
-                $event = $eventId ? UserEvent::with('eventType')->find($eventId) : null;
+                $event = $eventId ? $this->scenarioEvents()->with('eventType')->find($eventId) : null;
 
                 $day = $date ? Carbon::parse($date) : now();
                 $startsAt = $event ? $event->starts_at : TimeUnit::shiftStart($day, '08:00:00');
@@ -520,7 +730,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
         [$startsAt, $endsAt] = $this->resolveEventPeriod($data, $eventType);
 
         $engine = app(ConstraintsEngine::class);
-        $result = $engine->validate($user, $eventType, $startsAt, $endsAt);
+        $result = $engine->validate($user, $eventType, $startsAt, $endsAt, null, $this->draft);
 
         if (! $result->isAllowed) {
             Notification::make()
@@ -533,11 +743,12 @@ class DutyMatrix extends Page implements HasForms, HasActions
         }
 
         UserEvent::create([
+            'schedule_draft_id' => $this->draft?->id,
             'user_id' => $user->id,
             'event_type_id' => $eventType->id,
             'starts_at' => $startsAt,
             'ends_at' => $endsAt,
-            'status' => 'draft',
+            'status' => 'approved',
             'has_warning' => $result->status === ConstraintCheckResult::STATUS_WARNING,
             'warning_reason' => $result->reason,
             'note' => $this->persistEventNote($data['note'] ?? null),
@@ -559,13 +770,13 @@ class DutyMatrix extends Page implements HasForms, HasActions
 
     protected function updateEvent(array $data): void
     {
-        $event = UserEvent::findOrFail($data['event_id']);
+        $event = $this->scenarioEvents()->findOrFail($data['event_id']);
         $user = User::findOrFail($data['user_id']);
         $eventType = EventType::findOrFail($data['event_type_id']);
         [$startsAt, $endsAt] = $this->resolveEventPeriod($data, $eventType);
 
         $engine = app(ConstraintsEngine::class);
-        $result = $engine->validate($user, $eventType, $startsAt, $endsAt, $event->id);
+        $result = $engine->validate($user, $eventType, $startsAt, $endsAt, $event->id, $this->draft);
 
         if (! $result->isAllowed) {
             Notification::make()
@@ -601,7 +812,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
 
     public function deleteEvent(int $eventId): void
     {
-        $event = UserEvent::findOrFail($eventId);
+        $event = $this->scenarioEvents()->findOrFail($eventId);
         abort_unless(auth()->user()?->can('delete', $event), 403);
 
         $this->flushMatrixCachesForRange($event->starts_at, $event->ends_at);
@@ -610,58 +821,31 @@ class DutyMatrix extends Page implements HasForms, HasActions
         Notification::make()->title(__('Event deleted'))->success()->send();
     }
 
-    public function approveEvent(int $eventId): void
-    {
-        abort_unless(auth()->user()?->hasRole(['Admin', 'Manager']), 403);
-
-        $event = UserEvent::findOrFail($eventId);
-        if ($event->status !== 'draft') {
-            Notification::make()->title(__('Event is no longer a draft'))->warning()->send();
-
-            return;
-        }
-
-        $event->update(['status' => 'approved']);
-        $this->flushMatrixCachesForRange($event->starts_at, $event->ends_at);
-
-        Notification::make()->title(__('Draft approved'))->success()->send();
-    }
-
-    public function approveCurrentMonthDrafts(): void
-    {
-        abort_unless(auth()->user()?->hasRole(['Admin', 'Manager']), 403);
-
-        [$start, $end] = $this->periodBounds();
-        $approved = UserEvent::query()
-            ->where('status', 'draft')
-            ->overlappingPeriod($start, $end)
-            ->update(['status' => 'approved', 'updated_at' => now()]);
-
-        $this->flushMatrixCachesForRange($start, $end);
-
-        Notification::make()
-            ->title(__('Monthly drafts approved'))
-            ->body(__('Events approved: :count.', ['count' => $approved]))
-            ->success()
-            ->send();
-    }
-
+    /**
+     * Clears the approved month (Admin only) or, in a draft tab, all events of the draft.
+     */
     public function clearCurrentMonth(): void
     {
-        abort_unless(auth()->user()?->hasRole('Admin'), 403);
-
         [$start, $end] = $this->periodBounds();
+        $draft = $this->draft;
 
-        $deleted = UserEvent::query()
-            ->where('status', '!=', 'cancelled')
-            ->where('starts_at', '>=', $start)
-            ->where('starts_at', '<=', $end)
-            ->delete();
+        if ($draft) {
+            $this->authorizeDraft('update');
+            $deleted = $draft->events()->delete();
+        } else {
+            abort_unless(auth()->user()?->hasRole('Admin'), 403);
+            $deleted = UserEvent::query()
+                ->inScenario(null)
+                ->where('status', '!=', 'cancelled')
+                ->where('starts_at', '>=', $start)
+                ->where('starts_at', '<=', $end)
+                ->delete();
+        }
 
         $this->flushMatrixCachesForRange($start, $end);
 
         Notification::make()
-            ->title(__('Month cleared'))
+            ->title($draft ? __('Draft cleared') : __('Month cleared'))
             ->body(__('Deleted :count active events for the period :from–:to.', [
                 'count' => $deleted,
                 'from' => $start->format('d.m.Y'),
@@ -671,15 +855,18 @@ class DutyMatrix extends Page implements HasForms, HasActions
             ->send();
     }
 
+    /**
+     * Events that can be edited in the current tab: the draft's own events or
+     * the approved schedule.
+     */
+    protected function scenarioEvents()
+    {
+        return UserEvent::query()->where('schedule_draft_id', $this->draft?->id);
+    }
+
     protected function flushMatrixCachesForRange(Carbon $startsAt, Carbon $endsAt): void
     {
-        $current = $startsAt->copy()->startOfMonth();
-        $last = $endsAt->copy()->startOfMonth();
-
-        while ($current->lte($last)) {
-            Cache::forget("wfm:matrix:{$current->format('Y-m')}");
-            Cache::forget('wfm:coverage:'.$current->format('Y-m'));
-            $current->addMonth();
-        }
+        MatrixCache::forgetRange($startsAt, $endsAt, $this->draft?->id);
+        $this->limitViolations = null;
     }
 }

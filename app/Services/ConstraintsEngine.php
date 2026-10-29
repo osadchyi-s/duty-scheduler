@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\EventType;
 use App\Models\User;
+use App\Models\ScheduleDraft;
 use App\Models\UserEvent;
+use App\Support\MatrixCache;
 use App\Support\TimeUnit;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -31,6 +33,7 @@ class ConstraintsEngine
      * Full check before an event is created or moved.
      *
      * @param  int|null  $ignoreEventId  id of the event to ignore during the check (when editing an existing one)
+     * @param  ScheduleDraft|null  $draft  scenario to check in; null means the approved schedule
      */
     public function validate(
         User $user,
@@ -38,25 +41,26 @@ class ConstraintsEngine
         Carbon $startsAt,
         Carbon $endsAt,
         ?int $ignoreEventId = null,
+        ?ScheduleDraft $draft = null,
     ): ConstraintCheckResult {
         if ($result = $this->checkPermission($user, $eventType)) {
             return $result;
         }
 
-        if ($result = $this->checkBlockingExclusivity($user, $eventType, $startsAt, $endsAt, $ignoreEventId)) {
+        if ($result = $this->checkBlockingExclusivity($user, $eventType, $startsAt, $endsAt, $ignoreEventId, $draft)) {
             return $result;
         }
 
-        if ($result = $this->checkCapacity($eventType, $startsAt, $endsAt, $ignoreEventId)) {
+        if ($result = $this->checkCapacity($eventType, $startsAt, $endsAt, $ignoreEventId, $draft)) {
             return $result;
         }
 
-        $limitResult = $this->dutyLimits->check($user, $eventType, $startsAt, $endsAt, $ignoreEventId);
+        $limitResult = $this->dutyLimits->check($user, $eventType, $startsAt, $endsAt, $ignoreEventId, $draft);
         if ($limitResult && ! $limitResult->isAllowed) {
             return $limitResult;
         }
 
-        $restResult = $this->evaluateRestPeriod($user, $eventType, $startsAt, $endsAt, $ignoreEventId);
+        $restResult = $this->evaluateRestPeriod($user, $eventType, $startsAt, $endsAt, $ignoreEventId, $draft);
 
         return $limitResult ? $this->mergeWarning($restResult, $limitResult) : $restResult;
     }
@@ -104,8 +108,10 @@ class ConstraintsEngine
         Carbon $startsAt,
         Carbon $endsAt,
         ?int $ignoreEventId,
+        ?ScheduleDraft $draft = null,
     ): ?ConstraintCheckResult {
         $overlapping = UserEvent::query()
+            ->inScenario($draft)
             ->where('user_id', $user->id)
             ->where('status', '!=', 'cancelled')
             ->when($ignoreEventId, fn ($q) => $q->where('id', '!=', $ignoreEventId))
@@ -168,12 +174,14 @@ class ConstraintsEngine
         Carbon $startsAt,
         Carbon $endsAt,
         ?int $ignoreEventId,
+        ?ScheduleDraft $draft = null,
     ): ?ConstraintCheckResult {
         if ($eventType->max_capacity === null) {
             return null;
         }
 
         $currentCount = UserEvent::query()
+            ->inScenario($draft)
             ->where('event_type_id', $eventType->id)
             ->where('status', '!=', 'cancelled')
             ->when($ignoreEventId, fn ($q) => $q->where('id', '!=', $ignoreEventId))
@@ -203,12 +211,14 @@ class ConstraintsEngine
         Carbon $startsAt,
         Carbon $endsAt,
         ?int $ignoreEventId = null,
+        ?ScheduleDraft $draft = null,
     ): ConstraintCheckResult {
         if (! $eventType->is_work_time) {
             return ConstraintCheckResult::ok();
         }
 
         $previousEvent = UserEvent::query()
+            ->inScenario($draft)
             ->where('user_id', $user->id)
             ->where('status', '!=', 'cancelled')
             ->when($ignoreEventId, fn ($q) => $q->where('id', '!=', $ignoreEventId))
@@ -218,6 +228,7 @@ class ConstraintsEngine
             ->first();
 
         $nextEvent = UserEvent::query()
+            ->inScenario($draft)
             ->where('user_id', $user->id)
             ->where('status', '!=', 'cancelled')
             ->when($ignoreEventId, fn ($q) => $q->where('id', '!=', $ignoreEventId))
@@ -337,12 +348,13 @@ class ConstraintsEngine
      * Redis-cached monthly coverage (number of assigned people) per date and event type,
      * used to highlight understaffed dates in the matrix (spec 9.2).
      */
-    public function monthlyCoverage(Carbon $monthStart, Carbon $monthEnd): array
+    public function monthlyCoverage(Carbon $monthStart, Carbon $monthEnd, ?ScheduleDraft $draft = null): array
     {
-        $cacheKey = 'wfm:coverage:'.$monthStart->format('Y-m');
+        $cacheKey = MatrixCache::coverageKey($monthStart->format('Y-m'), $draft?->id);
 
-        return Cache::remember($cacheKey, now()->addMinutes(15), function () use ($monthStart, $monthEnd) {
+        return Cache::remember($cacheKey, now()->addMinutes(15), function () use ($monthStart, $monthEnd, $draft) {
             $events = UserEvent::query()
+                ->inScenario($draft)
                 ->where('status', '!=', 'cancelled')
                 ->whereBetween('starts_at', [$monthStart, $monthEnd])
                 ->with('eventType:id,name,min_capacity')

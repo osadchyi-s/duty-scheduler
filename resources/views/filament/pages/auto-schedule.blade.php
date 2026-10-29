@@ -2,7 +2,7 @@
     <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 mb-6">
         <form
             wire:submit.prevent="generate"
-            wire:confirm="{{ __('Run auto-generation? If a delete mode is selected, previous assignments will be permanently deleted.') }}"
+            wire:confirm="{{ __('Run auto-generation? If the delete mode is selected, existing assignments in the draft will be replaced.') }}"
         >
             {{ $this->form }}
 
@@ -11,13 +11,21 @@
                     {{ __('Generate schedule') }}
                 </x-filament::button>
                 <span class="text-xs text-gray-400 ml-3">
-                    {{ __('Creates drafts — they will not appear in the schedule until reviewed in the matrix.') }}
+                    {{ __('Generates into a draft — the approved schedule changes only after the draft is approved in the matrix.') }}
                 </span>
             </div>
         </form>
     </div>
 
     @if($result)
+        @isset($result['matrixUrl'])
+            <div class="rounded-xl border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-950/30 p-4 mb-6 text-sm flex items-center justify-between gap-4">
+                <span>{{ __('Draft: :name.', ['name' => $result['draftName']]) }}</span>
+                <x-filament::button tag="a" :href="$result['matrixUrl']" size="sm" icon="heroicon-o-calendar-days">
+                    {{ __('Open the draft in the matrix') }}
+                </x-filament::button>
+            </div>
+        @endisset
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div class="rounded-xl border p-4 bg-white dark:bg-gray-900">
                 <div class="text-xs text-gray-400">{{ __('Assignments created') }}</div>
@@ -96,7 +104,7 @@
                     </table>
                 </div>
                 <div class="mt-3 text-xs text-gray-400">
-                    {{ __('Drafts can be approved individually or all at once in the duty matrix.') }}
+                    {{ __('Review the draft in the duty matrix and approve it there.') }}
                 </div>
             </div>
         @endif

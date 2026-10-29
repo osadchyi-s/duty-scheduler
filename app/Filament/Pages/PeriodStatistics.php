@@ -13,7 +13,7 @@ use Filament\Forms\Form;
 use Filament\Pages\Page;
 
 /**
- * Аналітичний звіт за довільний період (ТЗ п.6.2).
+ * Analytics report for an arbitrary period (spec 6.2).
  */
 class PeriodStatistics extends Page implements HasForms
 {
@@ -64,7 +64,7 @@ class PeriodStatistics extends Page implements HasForms
     }
 
     /**
-     * Таблиця розподілу навантаження: к-сть подій кожного типу для кожного співробітника.
+     * Workload distribution table: number of events of each type per employee.
      */
     public function getWorkloadTableProperty(): array
     {
@@ -86,7 +86,7 @@ class PeriodStatistics extends Page implements HasForms
     }
 
     /**
-     * Аналіз кадрового дефіциту: дати, коли покриття було на рівні min_capacity або нижче.
+     * Staffing deficit analysis: dates when coverage was below min_capacity.
      */
     public function getDeficitDatesProperty(): array
     {
@@ -117,7 +117,7 @@ class PeriodStatistics extends Page implements HasForms
     }
 
     /**
-     * Коефіцієнт використання винятків: % змін з has_warning = true.
+     * Exception rate: percentage of shifts with has_warning = true.
      */
     public function getExceptionRateProperty(): array
     {

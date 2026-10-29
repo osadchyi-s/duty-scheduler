@@ -23,7 +23,7 @@ class UserPolicy
 
     public function delete(User $user, User $model): bool
     {
-        // Лише Admin і не сам себе.
+        // Admin only, and not themselves.
         return $user->hasRole('Admin') && $user->id !== $model->id;
     }
 }

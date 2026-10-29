@@ -18,8 +18,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // App\Models\* policies (UserEventPolicy, EventTypePolicy, UserPolicy)
-        // авто-виявляються за конвенцією Laravel. Role — з пакету Spatie,
-        // тому реєструємо явно.
+        // are auto-discovered by Laravel convention. Role comes from the Spatie
+        // package, so it is registered explicitly.
         Gate::policy(Role::class, RolePolicy::class);
     }
 }

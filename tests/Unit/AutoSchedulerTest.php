@@ -47,7 +47,7 @@ it('fills min_capacity for every day in the period', function () {
 
 it('distributes shifts fairly across eligible users', function () {
     $from = Carbon::parse('2026-09-01');
-    $to = Carbon::parse('2026-09-06'); // 6 днів, 3 людини -> по 2 зміни кожному (з урахуванням min_rest=24)
+    $to = Carbon::parse('2026-09-06'); // 6 days, 3 people -> 2 shifts each (taking min_rest=24 into account)
 
     $this->scheduler->generate($from, $to, [$this->dutyType->id]);
 
@@ -56,13 +56,13 @@ it('distributes shifts fairly across eligible users', function () {
         ->groupBy('user_id')
         ->map->count();
 
-    // Жоден співробітник не повинен отримати істотно більше змін за інших.
+    // No employee should get noticeably more shifts than the others.
     expect($counts->max() - $counts->min())->toBeLessThanOrEqual(1);
 });
 
 it('records a deficit when no eligible user passes the constraints', function () {
-    // Лише один співробітник з допуском, чергування 24г/48г бажаного відпочинку -
-    // на другий день поспіль buде forbidden (rest < 24h).
+    // Only one permitted employee, 24h duty with 48h preferred rest:
+    // the second day in a row is forbidden (rest < 24h).
     $lonelyType = EventType::create([
         'name' => 'Ексклюзивне чергування', 'code' => 'solo_duty', 'color_code' => '#000000',
         'is_blocking' => false, 'min_capacity' => 1, 'max_capacity' => 1,
@@ -78,7 +78,7 @@ it('records a deficit when no eligible user passes the constraints', function ()
     $solo->allowedEventTypes()->attach($lonelyType->id);
 
     $from = Carbon::parse('2026-09-01');
-    $to = Carbon::parse('2026-09-02')->endOfDay(); // два дні поспіль -> другий день неможливо заповнити
+    $to = Carbon::parse('2026-09-02')->endOfDay(); // two days in a row -> the second day cannot be filled
 
     $result = $this->scheduler->generate($from, $to, [$lonelyType->id]);
 

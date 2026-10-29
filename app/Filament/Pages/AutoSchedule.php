@@ -15,8 +15,8 @@ use Filament\Pages\Page;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Автоматичний розподіл чергувань наперед на заданий період (за замовчуванням — місяць).
- * Доступно Admin / Manager (створює лише `draft`-події — фінально затверджує менеджер у Матриці).
+ * Automatic duty assignment for a given future period (a month by default).
+ * Available to Admin / Manager (creates only `draft` events; a manager approves them in the matrix).
  */
 class AutoSchedule extends Page implements HasForms
 {
@@ -31,8 +31,8 @@ class AutoSchedule extends Page implements HasForms
     public ?array $data = [];
 
     /**
-     * Зберігаємо як звичайний масив (не об'єкт AutoScheduleResult) — Livewire
-     * серіалізує лише прості типи (масиви/скаляри) в публічних властивостях.
+     * Stored as a plain array (not an AutoScheduleResult object): Livewire
+     * serializes only simple types (arrays/scalars) in public properties.
      */
     public ?array $result = null;
 

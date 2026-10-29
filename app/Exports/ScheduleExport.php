@@ -14,7 +14,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 /**
- * Експорт матриці чергувань за місяць у .xlsx зі збереженням візуального стилю (ТЗ п.7).
+ * Monthly duty matrix export to .xlsx that keeps the visual style (spec 7).
  */
 class ScheduleExport implements FromArray, WithStyles, WithEvents
 {
@@ -85,7 +85,7 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
                             }
                             $shiftCount++;
                         }
-                        // Excel-координати заповнюємо пізніше в AfterSheet (rowIndex+2, colIndex+2)
+                        // Excel coordinates are filled in later in AfterSheet (rowIndex+2, colIndex+2)
                         $this->eventCellColors[($rowIndex + 2).'_'.($colIndex + 1)] = ltrim($ev->eventType->color_code, '#');
                     }
                     $row[] = implode(',', $names);
@@ -126,7 +126,7 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
                 foreach ($this->eventCellColors as $key => $color) {
                     [$row, $col] = array_pad(explode('_', $key), 2, null);
                     if (str_ends_with($key, '_weekend')) {
-                        continue; // спрощено: основний колір типу події має пріоритет
+                        continue; // simplified: the event type color takes precedence
                     }
                     $cellCoordinate = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col).$row;
                     $sheet->getStyle($cellCoordinate)->getFill()

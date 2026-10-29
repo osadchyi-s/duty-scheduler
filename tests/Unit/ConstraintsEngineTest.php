@@ -47,7 +47,7 @@ it('marks rest between min and preferred as warning', function () {
         'status' => 'approved',
     ]);
 
-    // Наступне чергування через 30 год (між min=24 і preferred=48) -> Warning
+    // Next duty after 30 h (between min=24 and preferred=48) -> Warning
     $result = $this->engine->validate(
         $this->user, $this->dutyType,
         Carbon::parse('2026-09-03 14:00'), Carbon::parse('2026-09-04 14:00')
@@ -64,7 +64,7 @@ it('forbids rest below the hard minimum', function () {
         'status' => 'approved',
     ]);
 
-    // Наступне чергування вже через 10 год (< min 24) -> Forbidden
+    // Next duty after only 10 h (< min 24) -> Forbidden
     $result = $this->engine->validate(
         $this->user, $this->dutyType,
         Carbon::parse('2026-09-02 18:00'), Carbon::parse('2026-09-03 18:00')

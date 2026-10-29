@@ -13,16 +13,15 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Автоматичний розподіл чергувань наперед на заданий період.
+ * Automatic duty assignment for a given future period.
  *
- * Алгоритм — жадібний (greedy) із балансуванням навантаження:
- *   для кожного дня періоду і кожного обраного "розкладного" типу події
- *   бере список допущених співробітників (user_event_type_permissions),
- *   перевіряє кожного через ConstraintsEngine і випадково обирає з допустимих,
- *   зважуючи вибір синергією та балансом навантаження.
+ * The algorithm is greedy with workload balancing: for each day of the period
+ * and each selected schedulable event type it takes the permitted employees
+ * (user_event_type_permissions), validates each through ConstraintsEngine and
+ * picks one at random among the least loaded valid candidates, weighted by synergy.
  *
- * Все, що створюється — статус `draft`: менеджер переглядає й затверджує
- * в самій Матриці чергувань, нічого не потрапляє в графік "наосліп".
+ * Everything created has the `draft` status: a manager reviews and approves
+ * it in the duty matrix, so nothing gets into the schedule unreviewed.
  */
 class AutoScheduler
 {
@@ -71,7 +70,7 @@ class AutoScheduler
             ->get();
 
         $workloadHours = [];
-        $shiftCounts = []; // [user_id][event_type_id] => к-сть змін, призначених у цьому запуску
+        $shiftCounts = []; // [user_id][event_type_id] => number of shifts assigned in this run
         $synergies = Synergy::with('eventTypes:id')->get()->keyBy(
             fn (Synergy $synergy): string => $this->synergyPairKey($synergy->user_a_id, $synergy->user_b_id)
         );
@@ -133,7 +132,7 @@ class AutoScheduler
         Carbon $rangeEnd,
     ): void {
         if (! $eventType->default_duration_hours) {
-            return; // неможливо розрахувати ends_at без тривалості — пропускаємо (див. форму типу події)
+            return; // ends_at cannot be calculated without a duration, so skip (see the event type form)
         }
 
         $target = $fillToMax && $eventType->max_capacity
@@ -149,7 +148,7 @@ class AutoScheduler
         $endsAt = $startsAt->copy()->addHours($durationHours);
 
         if ($startsAt->gt($rangeEnd)) {
-            return; // не створюємо подію, яка починається після кінця вибраного періоду
+            return; // do not create an event that starts after the end of the selected period
         }
 
         $existingCount = UserEvent::where('event_type_id', $eventType->id)
@@ -201,7 +200,7 @@ class AutoScheduler
             }
 
             if ($validCandidates === []) {
-                break; // жодного придатного кандидата не залишилось — фіксуємо дефіцит
+                break; // no eligible candidates left, so record a deficit
             }
 
             $selected = $this->chooseCandidate($validCandidates, $workloadHours, $shiftCounts, $eventType->id);
@@ -332,8 +331,8 @@ class AutoScheduler
     }
 
     /**
-     * Стартове навантаження (год) кожного співробітника за вже наявними подіями в періоді —
-     * щоб автогенерація "добудовувала" графік рівномірно, а не ігнорувала вже призначене вручну.
+     * Initial workload (hours) of each employee from existing events in the period,
+     * so auto-generation completes the schedule evenly instead of ignoring manual assignments.
      */
     protected function initialWorkload(Collection $users, Carbon $from, Carbon $to): array
     {

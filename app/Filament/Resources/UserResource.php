@@ -69,7 +69,7 @@ class UserResource extends Resource
                         ->label(__('Role'))
                         ->relationship('roles', 'name')
                         ->options(function () {
-                            // Manager може призначати лише User/Manager, не Admin.
+                            // A Manager can assign only User/Manager roles, not Admin.
                             $roles = Role::query();
                             if (! Auth::user()?->hasRole('Admin')) {
                                 $roles->whereIn('name', ['Manager', 'User']);

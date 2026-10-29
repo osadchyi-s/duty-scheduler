@@ -10,13 +10,13 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Сервіс багаторівневої валідації призначення події (Duty Matrix Constraints Engine).
+ * Multi-level validation of event assignments (Duty Matrix Constraints Engine).
  *
- * Порядок перевірок відповідає ТЗ п.4:
- *   1. Допуск співробітника до типу події (user_event_type_permissions)
- *   2. Ексклюзивність (is_blocking) — конфлікт з іншими подіями співробітника
- *   3. Місткість (max_capacity) на дату/зміну
- *   4. Оцінка часу відпочинку (min_rest_hours / preferred_rest_hours)
+ * The order of checks follows spec 4:
+ *   1. Employee permission for the event type (user_event_type_permissions)
+ *   2. Exclusivity (is_blocking): conflicts with the employee's other events
+ *   3. Capacity (max_capacity) per date/shift
+ *   4. Rest period evaluation (min_rest_hours / preferred_rest_hours)
  *
  * Duty limits (DutyLimitChecker) are checked after capacity and before rest:
  * a hard limit forbids the assignment, a soft one adds a warning.
@@ -28,9 +28,9 @@ class ConstraintsEngine
     }
 
     /**
-     * Повна перевірка перед створенням/переміщенням події.
+     * Full check before an event is created or moved.
      *
-     * @param  int|null  $ignoreEventId  id події, яку ігноруємо при перевірці (для редагування existing)
+     * @param  int|null  $ignoreEventId  id of the event to ignore during the check (when editing an existing one)
      */
     public function validate(
         User $user,
@@ -78,7 +78,7 @@ class ConstraintsEngine
     }
 
     /**
-     * 1. Перевірка допуску: чи дозволено співробітнику цей тип події.
+     * 1. Permission check: whether the employee may be assigned this event type.
      */
     protected function checkPermission(User $user, EventType $eventType): ?ConstraintCheckResult
     {
@@ -95,8 +95,8 @@ class ConstraintsEngine
     }
 
     /**
-     * 2. Перевірка ексклюзивності: is_blocking-подія блокує будь-які інші події,
-     *    а нова подія не може накладатись на вже існуючу блокуючу подію співробітника.
+     * 2. Exclusivity check: an is_blocking event blocks any other events, and a new
+     *    event cannot overlap an existing blocking event of the employee.
      */
     protected function checkBlockingExclusivity(
         User $user,
@@ -113,7 +113,7 @@ class ConstraintsEngine
             ->with('eventType')
             ->get();
 
-        // Якщо нова подія сама блокуюча — будь-яке перекриття з іншою подією забороняється.
+        // If the new event is blocking itself, any overlap with another event is forbidden.
         if ($eventType->is_blocking && $overlapping->isNotEmpty()) {
             $conflict = $overlapping->first();
 
@@ -127,7 +127,7 @@ class ConstraintsEngine
             );
         }
 
-        // Якщо будь-яка з існуючих подій, що перекриваються, є блокуючою — теж заборона.
+        // If any of the overlapping existing events is blocking, it is forbidden as well.
         $blockingConflict = $overlapping->first(fn (UserEvent $e) => $e->eventType->is_blocking);
         if ($blockingConflict) {
             return ConstraintCheckResult::forbidden(
@@ -160,8 +160,8 @@ class ConstraintsEngine
     }
 
     /**
-     * 3. Перевірка місткості: скільки людей вже призначено на цей тип події
-     *    в межах доби (перекриття інтервалів), не більше max_capacity.
+     * 3. Capacity check: the number of people already assigned to this event type
+     *    in the period (overlapping intervals) must not exceed max_capacity.
      */
     protected function checkCapacity(
         EventType $eventType,
@@ -193,7 +193,7 @@ class ConstraintsEngine
     }
 
     /**
-     * 4. Оцінка часу відпочинку відносно попередньої та наступної події співробітника.
+     * 4. Rest period evaluation against the employee's previous and next events.
      *    Optimal >= preferred; [min, preferred) => Warning; < min => Forbidden.
      *    Each gap is governed by the rest rules of the event before it.
      */
@@ -316,7 +316,7 @@ class ConstraintsEngine
     }
 
     /**
-     * Комбінує статус двох перевірок (до/після), обираючи найгірший (forbidden > warning > optimal).
+     * Combines the status of two checks (before/after), picking the worst (forbidden > warning > optimal).
      */
     protected function pickWorst(string $currentStatus, ?float $currentRest, ?string $currentReason, string $newStatus, float $newRest, string $newReason): array
     {
@@ -334,8 +334,8 @@ class ConstraintsEngine
     }
 
     /**
-     * Кешована в Redis статистика покриття (кількість призначених) по датах для типу події
-     * за місяць — використовується для підсвічування дефіцитних дат у матриці (п.9.2).
+     * Redis-cached monthly coverage (number of assigned people) per date and event type,
+     * used to highlight understaffed dates in the matrix (spec 9.2).
      */
     public function monthlyCoverage(Carbon $monthStart, Carbon $monthEnd): array
     {

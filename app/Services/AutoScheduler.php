@@ -6,6 +6,7 @@ use App\Models\EventType;
 use App\Models\Synergy;
 use App\Models\User;
 use App\Models\UserEvent;
+use App\Support\TimeUnit;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -143,8 +144,9 @@ class AutoScheduler
             return;
         }
 
-        $startsAt = $day->copy()->setTimeFromTimeString($eventType->default_start_time ?? '08:00:00');
-        $endsAt = $startsAt->copy()->addHours($eventType->default_duration_hours);
+        $durationHours = TimeUnit::normalizeDurationHours($eventType->default_duration_hours);
+        $startsAt = TimeUnit::shiftStart($day, $eventType->default_start_time);
+        $endsAt = $startsAt->copy()->addHours($durationHours);
 
         if ($startsAt->gt($rangeEnd)) {
             return; // не створюємо подію, яка починається після кінця вибраного періоду
@@ -202,7 +204,7 @@ class AutoScheduler
                 break; // жодного придатного кандидата не залишилось — фіксуємо дефіцит
             }
 
-            $selected = $this->chooseCandidate($validCandidates, $workloadHours, $shiftCounts, $eventType);
+            $selected = $this->chooseCandidate($validCandidates, $workloadHours, $shiftCounts, $eventType->id, $durationHours);
             /** @var User $candidate */
             $candidate = $selected['user'];
             /** @var ConstraintCheckResult $check */
@@ -220,7 +222,7 @@ class AutoScheduler
             ]);
 
             if ($eventType->is_work_time) {
-                $workloadHours[$candidate->id] = ($workloadHours[$candidate->id] ?? 0) + $eventType->default_duration_hours;
+                $workloadHours[$candidate->id] = ($workloadHours[$candidate->id] ?? 0) + $durationHours;
             }
             $shiftCounts[$candidate->id][$eventType->id] = ($shiftCounts[$candidate->id][$eventType->id] ?? 0) + 1;
             $assignedTodayThisType->put($candidate->id, true);
@@ -281,13 +283,13 @@ class AutoScheduler
      * Draws a weighted random candidate: higher synergy can receive up to 100
      * times the weight, while workload and shift counts still favor fairness.
      */
-    protected function chooseCandidate(array $candidates, array $workloadHours, array $shiftCounts, EventType $eventType): array
+    protected function chooseCandidate(array $candidates, array $workloadHours, array $shiftCounts, int $eventTypeId, int $durationHours): array
     {
         $scores = array_column($candidates, 'synergy');
         $minScore = min($scores);
         $maxScore = max($scores);
         $minWorkload = min(array_map(fn (array $item): int => $workloadHours[$item['user']->id] ?? 0, $candidates));
-        $minShiftCount = min(array_map(fn (array $item): int => $shiftCounts[$item['user']->id][$eventType->id] ?? 0, $candidates));
+        $minShiftCount = min(array_map(fn (array $item): int => $shiftCounts[$item['user']->id][$eventTypeId] ?? 0, $candidates));
         $weightedCandidates = [];
         $totalWeight = 0;
 
@@ -297,8 +299,8 @@ class AutoScheduler
                 : ($candidate['synergy'] - $minScore) / ($maxScore - $minScore);
             $synergyWeight = (int) round(1000 * (100 ** $synergyLevel));
             $workloadDifference = ($workloadHours[$candidate['user']->id] ?? 0) - $minWorkload;
-            $shiftDifference = ($shiftCounts[$candidate['user']->id][$eventType->id] ?? 0) - $minShiftCount;
-            $fairnessFactor = 1 + ($workloadDifference / max(1, $eventType->default_duration_hours)) + $shiftDifference;
+            $shiftDifference = ($shiftCounts[$candidate['user']->id][$eventTypeId] ?? 0) - $minShiftCount;
+            $fairnessFactor = 1 + ($workloadDifference / max(1, $durationHours)) + $shiftDifference;
             $weight = max(1, (int) round($synergyWeight / $fairnessFactor));
 
             $weightedCandidates[] = ['candidate' => $candidate, 'weight' => $weight];

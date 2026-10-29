@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\EventType;
 use App\Models\User;
 use App\Models\UserEvent;
+use App\Support\TimeUnit;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 
@@ -90,8 +91,8 @@ class ConstraintsEngine
                 __('Event “:event” is exclusive (is_blocking) and conflicts with existing event “:conflict” (:from–:to).', [
                     'event' => $eventType->name,
                     'conflict' => $conflict->eventType->name,
-                    'from' => $conflict->starts_at->format('d.m H:i'),
-                    'to' => $conflict->ends_at->format('d.m H:i'),
+                    'from' => TimeUnit::formatStart($conflict->starts_at),
+                    'to' => TimeUnit::formatEnd($conflict->starts_at, $conflict->ends_at),
                 ])
             );
         }
@@ -103,7 +104,7 @@ class ConstraintsEngine
                 __('The employee is already in exclusive event “:event” (:from–:to), which blocks all other assignments.', [
                     'event' => $blockingConflict->eventType->name,
                     'from' => $blockingConflict->starts_at->format('d.m'),
-                    'to' => $blockingConflict->ends_at->format('d.m'),
+                    'to' => UserEvent::lastCoveredDayFor($blockingConflict->starts_at, $blockingConflict->ends_at)->format('d.m'),
                 ])
             );
         }
@@ -118,8 +119,8 @@ class ConstraintsEngine
                     __('Duty “:event” overlaps with working event “:conflict” (:from–:to).', [
                         'event' => $eventType->name,
                         'conflict' => $overlappingWorkEvent->eventType->name,
-                        'from' => $overlappingWorkEvent->starts_at->format('d.m H:i'),
-                        'to' => $overlappingWorkEvent->ends_at->format('d.m H:i'),
+                        'from' => TimeUnit::formatStart($overlappingWorkEvent->starts_at),
+                        'to' => TimeUnit::formatEnd($overlappingWorkEvent->starts_at, $overlappingWorkEvent->ends_at),
                     ])
                 );
             }
@@ -205,9 +206,9 @@ class ConstraintsEngine
                 $worstStatus, $worstRestHours, $reason,
                 $this->classifyRest($restBefore, $eventType->min_rest_hours, $eventType->preferred_rest_hours),
                 $restBefore,
-                __('Rest after the previous event (:hours hours) is below the preferred amount (:preferred hours).', [
-                    'hours' => $restBefore,
-                    'preferred' => $eventType->preferred_rest_hours,
+                __('Rest after the previous event (:rest) is below the preferred amount (:preferred).', [
+                    'rest' => TimeUnit::format($restBefore),
+                    'preferred' => TimeUnit::format($eventType->preferred_rest_hours),
                 ])
             );
         }
@@ -220,10 +221,10 @@ class ConstraintsEngine
                 $worstStatus, $worstRestHours, $reason,
                 $this->classifyRest($restAfter, $nextType->min_rest_hours, $nextType->preferred_rest_hours),
                 $restAfter,
-                __('Rest before the next event “:event” (:hours hours) is below its preferred threshold (:preferred hours).', [
+                __('Rest before the next event “:event” (:rest) is below its preferred threshold (:preferred).', [
                     'event' => $nextType->name,
-                    'hours' => $restAfter,
-                    'preferred' => $nextType->preferred_rest_hours,
+                    'rest' => TimeUnit::format($restAfter),
+                    'preferred' => TimeUnit::format($nextType->preferred_rest_hours),
                 ])
             );
         }

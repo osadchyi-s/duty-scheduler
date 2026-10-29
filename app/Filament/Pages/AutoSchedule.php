@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\EventType;
 use App\Services\AutoScheduler;
+use App\Support\TimeUnit;
 use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -95,7 +96,7 @@ class AutoSchedule extends Page implements HasForms
                             ->orderBy('sort_order')
                             ->get()
                             ->mapWithKeys(fn (EventType $t) => [
-                                $t->id => $t->name.($t->default_duration_hours ? __('(:hours hours, min. :capacity people)', ['hours' => $t->default_duration_hours, 'capacity' => $t->min_capacity]) : __(' — duration is not set; this event type will be skipped')),
+                                $t->id => $t->name.($t->default_duration_hours ? __(' (:duration, min. :capacity people)', ['duration' => TimeUnit::format(TimeUnit::normalizeDurationHours($t->default_duration_hours)), 'capacity' => $t->min_capacity]) : __(' — duration is not set; this event type will be skipped')),
                             ]))
                         ->columns(2)
                         ->required(),

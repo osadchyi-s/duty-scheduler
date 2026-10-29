@@ -9,6 +9,7 @@ use App\Models\UserEvent;
 use App\Services\AutoScheduler;
 use App\Services\ConstraintCheckResult;
 use App\Services\ConstraintsEngine;
+use App\Support\TimeUnit;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
@@ -111,7 +112,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
     public function mount(): void
     {
         $this->month = request('month', now()->format('Y-m'));
-        $parsed = Carbon::createFromFormat('Y-m', $this->month);
+        $parsed = Carbon::createFromFormat('!Y-m', $this->month);
         $this->selectedMonth = (int) $parsed->month;
         $this->selectedYear = (int) $parsed->year;
     }
@@ -220,7 +221,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
 
     protected function periodBounds(): array
     {
-        $start = Carbon::createFromFormat('Y-m', $this->month)->startOfMonth();
+        $start = Carbon::createFromFormat('!Y-m', $this->month)->startOfMonth();
         $end = $start->copy()->endOfMonth();
 
         return [$start, $end];
@@ -275,7 +276,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
 
         foreach ($user->events as $event) {
             $currentDay = $event->starts_at->copy()->startOfDay();
-            $lastDay = $event->ends_at->copy()->startOfDay();
+            $lastDay = $event->lastCoveredDay();
 
             while ($currentDay->lte($lastDay)) {
                 $index[$currentDay->format('Y-m-d')][] = $event;
@@ -346,15 +347,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
                     ->required()
                     ->helperText(__('Only event types available to this employee are shown.'))
                     ->live(),
-                Forms\Components\DateTimePicker::make('starts_at')
-                    ->label(__('Start'))
-                    ->required()
-                    ->seconds(false),
-                Forms\Components\DateTimePicker::make('ends_at')
-                    ->label(__('End'))
-                    ->required()
-                    ->seconds(false)
-                    ->after('starts_at'),
+                ...$this->eventPeriodFields(),
                 Forms\Components\Textarea::make('note')
                     ->label(__('Note'))
                     ->rows(2),
@@ -391,15 +384,15 @@ class DutyMatrix extends Page implements HasForms, HasActions
                 $date = $arguments['date'] ?? null;
                 $event = $eventId ? UserEvent::with('eventType')->find($eventId) : null;
 
-                $startsAt = $event ? $event->starts_at : ($date ? Carbon::parse($date)->setTime(8, 0, 0) : now());
+                $day = $date ? Carbon::parse($date) : now();
+                $startsAt = $event ? $event->starts_at : TimeUnit::shiftStart($day, '08:00:00');
                 $defaultEndsAt = $event ? $event->ends_at : $startsAt->copy()->addHours($this->resolveDefaultShiftHours($event?->eventType?->id ?? null, $date));
 
                 return [
                     'event_id' => $eventId,
                     'user_id' => $event?->user_id ?? ($arguments['userId'] ?? null),
                     'event_type_id' => $event?->event_type_id ?? null,
-                    'starts_at' => $startsAt->format('Y-m-d H:i:s'),
-                    'ends_at' => $defaultEndsAt->format('Y-m-d H:i:s'),
+                    ...$this->eventPeriodFormState($startsAt, $defaultEndsAt),
                     'note' => $this->displayEventNote($event?->note),
                 ];
             })
@@ -426,19 +419,89 @@ class DutyMatrix extends Page implements HasForms, HasActions
 
         $fallback = EventType::where('is_active', true)->orderBy('default_duration_hours')->value('default_duration_hours');
 
-        return $fallback ?: 8;
+        return TimeUnit::normalizeDurationHours($fallback ?: 8);
+    }
+
+    /**
+     * Start/end fields of the assignment form: whole dates in "days" mode,
+     * date and time in "hours" mode.
+     */
+    protected function eventPeriodFields(): array
+    {
+        if (TimeUnit::usesDays()) {
+            return [
+                Forms\Components\DatePicker::make('starts_at')
+                    ->label(__('Start date'))
+                    ->required(),
+                Forms\Components\DatePicker::make('ends_at')
+                    ->label(__('End date (inclusive)'))
+                    ->required()
+                    ->afterOrEqual('starts_at'),
+            ];
+        }
+
+        return [
+            Forms\Components\DateTimePicker::make('starts_at')
+                ->label(__('Start'))
+                ->required()
+                ->seconds(false),
+            Forms\Components\DateTimePicker::make('ends_at')
+                ->label(__('End'))
+                ->required()
+                ->seconds(false)
+                ->after('starts_at'),
+        ];
+    }
+
+    /**
+     * Stored period => form state. In "days" mode the exclusive 00:00 end is
+     * shown as the last covered (inclusive) date.
+     */
+    protected function eventPeriodFormState(Carbon $startsAt, Carbon $endsAt): array
+    {
+        if (TimeUnit::usesDays()) {
+            return [
+                'starts_at' => $startsAt->format('Y-m-d'),
+                'ends_at' => UserEvent::lastCoveredDayFor($startsAt, $endsAt)->format('Y-m-d'),
+            ];
+        }
+
+        return [
+            'starts_at' => $startsAt->format('Y-m-d H:i:s'),
+            'ends_at' => $endsAt->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    /**
+     * Form state => stored period [starts_at, ends_at).
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    protected function resolveEventPeriod(array $data, EventType $eventType): array
+    {
+        $defaultHours = TimeUnit::normalizeDurationHours($eventType->default_duration_hours ?? 8);
+        $hasEnd = filled($data['ends_at'] ?? null);
+
+        if (TimeUnit::usesDays()) {
+            $startsAt = Carbon::parse($data['starts_at'])->startOfDay();
+            $endsAt = $hasEnd ? Carbon::parse($data['ends_at'])->startOfDay()->addDay() : null;
+        } else {
+            $startsAt = Carbon::parse($data['starts_at']);
+            $endsAt = $hasEnd ? Carbon::parse($data['ends_at']) : null;
+        }
+
+        if ($endsAt === null || $endsAt->lessThanOrEqualTo($startsAt)) {
+            $endsAt = $startsAt->copy()->addHours($defaultHours);
+        }
+
+        return [$startsAt, $endsAt];
     }
 
     protected function createEvent(array $data): void
     {
         $user = User::findOrFail($data['user_id']);
         $eventType = EventType::findOrFail($data['event_type_id']);
-        $startsAt = Carbon::parse($data['starts_at']);
-        $endsAt = Carbon::parse($data['ends_at'] ?? $startsAt->copy()->addHours($eventType->default_duration_hours ?? 8));
-
-        if ($endsAt->lessThanOrEqualTo($startsAt)) {
-            $endsAt = $startsAt->copy()->addHours($eventType->default_duration_hours ?? 8);
-        }
+        [$startsAt, $endsAt] = $this->resolveEventPeriod($data, $eventType);
 
         $engine = app(ConstraintsEngine::class);
         $result = $engine->validate($user, $eventType, $startsAt, $endsAt);
@@ -483,12 +546,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
         $event = UserEvent::findOrFail($data['event_id']);
         $user = User::findOrFail($data['user_id']);
         $eventType = EventType::findOrFail($data['event_type_id']);
-        $startsAt = Carbon::parse($data['starts_at']);
-        $endsAt = Carbon::parse($data['ends_at'] ?? $startsAt->copy()->addHours($eventType->default_duration_hours ?? 8));
-
-        if ($endsAt->lessThanOrEqualTo($startsAt)) {
-            $endsAt = $startsAt->copy()->addHours($eventType->default_duration_hours ?? 8);
-        }
+        [$startsAt, $endsAt] = $this->resolveEventPeriod($data, $eventType);
 
         $engine = app(ConstraintsEngine::class);
         $result = $engine->validate($user, $eventType, $startsAt, $endsAt, $event->id);

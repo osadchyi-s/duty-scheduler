@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -49,6 +50,26 @@ class UserEvent extends Model
     public function durationHours(): float
     {
         return $this->starts_at->diffInMinutes($this->ends_at) / 60;
+    }
+
+    /**
+     * Last calendar day the event occupies. The end is exclusive, so an event
+     * ending exactly at 00:00 does not cover that day.
+     */
+    public function lastCoveredDay(): Carbon
+    {
+        return static::lastCoveredDayFor($this->starts_at, $this->ends_at);
+    }
+
+    public static function lastCoveredDayFor(Carbon $startsAt, Carbon $endsAt): Carbon
+    {
+        $lastDay = $endsAt->copy()->startOfDay();
+
+        if ($endsAt->eq($lastDay) && $endsAt->gt($startsAt)) {
+            $lastDay->subDay();
+        }
+
+        return $lastDay;
     }
 
     public function scopeApproved($query)

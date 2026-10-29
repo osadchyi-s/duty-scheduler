@@ -35,7 +35,7 @@ beforeEach(function () {
 
 it('fills min_capacity for every day in the period', function () {
     $from = Carbon::parse('2026-09-01');
-    $to = Carbon::parse('2026-09-05');
+    $to = Carbon::parse('2026-09-05')->endOfDay();
 
     $result = $this->scheduler->generate($from, $to, [$this->dutyType->id]);
 
@@ -78,7 +78,7 @@ it('records a deficit when no eligible user passes the constraints', function ()
     $solo->allowedEventTypes()->attach($lonelyType->id);
 
     $from = Carbon::parse('2026-09-01');
-    $to = Carbon::parse('2026-09-02'); // два дні поспіль -> другий день неможливо заповнити
+    $to = Carbon::parse('2026-09-02')->endOfDay(); // два дні поспіль -> другий день неможливо заповнити
 
     $result = $this->scheduler->generate($from, $to, [$lonelyType->id]);
 

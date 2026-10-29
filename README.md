@@ -39,6 +39,8 @@ app/
     ConstraintsEngine.php      Core assignment validation logic
     ConstraintCheckResult.php  Validation result (optimal/warning/forbidden)
     AutoScheduler.php          Automatic schedule generation
+  Support/
+    TimeUnit.php               Days/hours conversion for the interface
   Policies/          Filament authorization policies
   Filament/
     Resources/       Event types, employees (including synergies), roles
@@ -49,6 +51,8 @@ app/
       AppSettings.php           Administrator settings, including locale
   Exports/
     ScheduleExport.php          Styled .xlsx export
+config/
+  scheduling.php     Interface time unit (days or hours)
 database/
   migrations/        Events, permissions, synergies, and application settings
   seeders/           Roles, users, and event types
@@ -132,6 +136,30 @@ candidate's selection weight by up to 100 times. Workload in hours and shift
 count also affect the weight to maintain a fair distribution. Selection is
 randomized to avoid repeatedly generating the same pairs, while permission,
 rest, capacity, and exclusivity checks still apply.
+
+## Time unit: days or hours
+
+By default, the interface works in whole days: events are assigned by date,
+and rest periods and shift durations are entered in days. Every event starts
+at 00:00 and ends at 00:00 of the day after its last day, so the end is
+exclusive. A one-day duty on September 1 is stored as
+`2026-09-01 00:00 – 2026-09-02 00:00`.
+
+Values are still stored in hours (`min_rest_hours`, `preferred_rest_hours`,
+`default_duration_hours`, `starts_at`/`ends_at`), and `App\Support\TimeUnit`
+converts them for the interface. To switch the interface back to hours, set
+the following in `.env` and clear the configuration cache:
+
+```bash
+SCHEDULE_TIME_UNIT=hours
+php artisan config:clear
+```
+
+The `2026_10_29_000000_align_scheduling_data_to_days` migration aligns
+existing data to whole days: rest below 24 hours becomes 0, other rest values
+and shift durations are rounded up to whole days, and events are moved to
+start at 00:00 and end at the next midnight. This change is lossy and is not
+reverted by a rollback.
 
 ## Interface language
 

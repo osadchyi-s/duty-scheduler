@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\EventType;
 use App\Models\User;
+use App\Support\TimeUnit;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithEvents;
@@ -25,7 +26,7 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
 
     public function __construct(protected string $month)
     {
-        $this->monthStart = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        $this->monthStart = Carbon::createFromFormat('!Y-m', $month)->startOfMonth();
         $this->monthEnd = $this->monthStart->copy()->endOfMonth();
     }
 
@@ -37,7 +38,7 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
         for ($d = $this->monthStart->copy(); $d->lte($this->monthEnd); $d->addDay()) {
             $header[] = $d->format('d.m');
         }
-        $header[] = __('Total hours');
+        $header[] = TimeUnit::usesDays() ? __('Total days') : __('Total hours');
         $header[] = __('Shifts');
         $rows[] = $header;
 
@@ -55,11 +56,12 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
             $row = [$employee->name];
             $totalHours = 0;
             $shiftCount = 0;
+            $countedEventIds = [];
 
             $eventsByDate = [];
             foreach ($employee->events as $event) {
                 $eventStartDate = $event->starts_at->copy()->startOfDay();
-                $eventEndDate = $event->ends_at->copy()->startOfDay();
+                $eventEndDate = $event->lastCoveredDay();
 
                 for ($date = $eventStartDate->copy(); $date->lte($eventEndDate); $date->addDay()) {
                     $eventsByDate[$date->format('Y-m-d')][] = $event;
@@ -75,10 +77,14 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
                     $names = [];
                     foreach ($dayEvents as $ev) {
                         $names[] = $ev->eventType->code;
-                        if ($ev->eventType->is_work_time) {
-                            $totalHours += $ev->durationHours();
+                        // A multi-day event is shown on every day but counted in the totals once.
+                        if (! isset($countedEventIds[$ev->id])) {
+                            $countedEventIds[$ev->id] = true;
+                            if ($ev->eventType->is_work_time) {
+                                $totalHours += $ev->durationHours();
+                            }
+                            $shiftCount++;
                         }
-                        $shiftCount++;
                         // Excel-координати заповнюємо пізніше в AfterSheet (rowIndex+2, colIndex+2)
                         $this->eventCellColors[($rowIndex + 2).'_'.($colIndex + 1)] = ltrim($ev->eventType->color_code, '#');
                     }
@@ -94,7 +100,7 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
                 $colIndex++;
             }
 
-            $row[] = round($totalHours, 1);
+            $row[] = round(TimeUnit::toDisplay($totalHours), 1);
             $row[] = $shiftCount;
             $rows[] = $row;
         }

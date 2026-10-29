@@ -164,7 +164,7 @@
                                                     ? '⚠️ ' . $event->warning_reason
                                                     : ($eventNote
                                                         ? __('Note: :note', ['note' => $eventNote])
-                                                        : $event->eventType->name . ' (' . $event->starts_at->format('H:i') . '–' . $event->ends_at->format('H:i') . ')');
+                                                        : $event->eventType->name . ' (' . \App\Support\TimeUnit::formatPeriod($event->starts_at, $event->ends_at) . ')');
                                                     $eventTitle = ($event->status === 'draft' ? __('Draft — ') : __('Approved — ')) . $eventTitle;
                                                 @endphp
                                             <button type="button"
@@ -193,7 +193,7 @@
 
                             @if($showStatsColumn)
                                 <td class="border-b border-l border-gray-100 dark:border-gray-800 px-2 py-1 text-[10px] whitespace-nowrap">
-                                    <div>{{ __(':hours hours', ['hours' => number_format($totalHours, 0)]) }}</div>
+                                    <div>{{ \App\Support\TimeUnit::format(round($totalHours)) }}</div>
                                     <div class="text-gray-400">
                                         @foreach($typeCounts as $code => $count)
                                             {{ $code }}: {{ $count }}@if(!$loop->last) | @endif

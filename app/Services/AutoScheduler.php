@@ -204,7 +204,7 @@ class AutoScheduler
                 break; // жодного придатного кандидата не залишилось — фіксуємо дефіцит
             }
 
-            $selected = $this->chooseCandidate($validCandidates, $workloadHours, $shiftCounts, $eventType->id, $durationHours);
+            $selected = $this->chooseCandidate($validCandidates, $workloadHours, $shiftCounts, $eventType->id);
             /** @var User $candidate */
             $candidate = $selected['user'];
             /** @var ConstraintCheckResult $check */
@@ -280,15 +280,24 @@ class AutoScheduler
     }
 
     /**
-     * Draws a weighted random candidate: higher synergy can receive up to 100
-     * times the weight, while workload and shift counts still favor fairness.
+     * Picks a candidate in two steps: only the employees with the lowest
+     * workload (hours) remain, then one of them is drawn at random. Among them,
+     * higher synergy can receive up to 100 times the weight, while a higher
+     * shift count for this event type lowers it.
      */
-    protected function chooseCandidate(array $candidates, array $workloadHours, array $shiftCounts, int $eventTypeId, int $durationHours): array
+    protected function chooseCandidate(array $candidates, array $workloadHours, array $shiftCounts, int $eventTypeId): array
     {
+        $workloadOf = fn (array $item): float => (float) ($workloadHours[$item['user']->id] ?? 0);
+        $minWorkload = min(array_map($workloadOf, $candidates));
+        // Workload may be fractional (events of arbitrary length), so compare with a tolerance.
+        $candidates = array_values(array_filter(
+            $candidates,
+            fn (array $item): bool => $workloadOf($item) - $minWorkload < 0.001
+        ));
+
         $scores = array_column($candidates, 'synergy');
         $minScore = min($scores);
         $maxScore = max($scores);
-        $minWorkload = min(array_map(fn (array $item): int => $workloadHours[$item['user']->id] ?? 0, $candidates));
         $minShiftCount = min(array_map(fn (array $item): int => $shiftCounts[$item['user']->id][$eventTypeId] ?? 0, $candidates));
         $weightedCandidates = [];
         $totalWeight = 0;
@@ -298,10 +307,8 @@ class AutoScheduler
                 ? 0
                 : ($candidate['synergy'] - $minScore) / ($maxScore - $minScore);
             $synergyWeight = (int) round(1000 * (100 ** $synergyLevel));
-            $workloadDifference = ($workloadHours[$candidate['user']->id] ?? 0) - $minWorkload;
             $shiftDifference = ($shiftCounts[$candidate['user']->id][$eventTypeId] ?? 0) - $minShiftCount;
-            $fairnessFactor = 1 + ($workloadDifference / max(1, $durationHours)) + $shiftDifference;
-            $weight = max(1, (int) round($synergyWeight / $fairnessFactor));
+            $weight = max(1, (int) round($synergyWeight / (1 + $shiftDifference)));
 
             $weightedCandidates[] = ['candidate' => $candidate, 'weight' => $weight];
             $totalWeight += $weight;

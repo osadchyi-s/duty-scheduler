@@ -116,24 +116,25 @@ Assignments that produce a rest warning are still allowed and are saved with
   drafts displayed in the current matrix month.
 - Employee synergy scores that apply to a pair in both employees' profiles.
   A synergy can apply to selected event types or to all types when none are
-  selected. The slider starts with `-1`, `0`, and `1`; the numeric input and
-  increment/decrement controls accept any integer. Lower scores are red and
-  higher scores are green.
+  selected. The score is set with a three-state switch: negative (`-1`, red),
+  neutral (`0`, gray), or positive (`1`, green).
 
 ## Employee synergy
 
 Each synergy record represents an **unordered employee pair**. The score is
 stored once, shown on both employees' profiles, and duplicate pair records are
-not created. A score of `0` is neutral; positive scores increase the chance
-that the employees will be assigned together, while negative scores decrease
-it.
+not created. The score has three states: `1` (positive) increases the chance
+that the employees will be assigned together, `-1` (negative) decreases it, and
+`0` (neutral) has no effect. Records created before the switch was introduced
+may hold other integers; the interface shows them by their sign.
 
 Select the event types for which the score should apply. If no event types are
 selected, it applies to all event types. During schedule generation, the
-scheduler calculates the candidate's average applicable synergy with
-employees already assigned on that date. Better synergy can increase the
-candidate's selection weight by up to 100 times. Workload in hours and shift
-count also affect the weight to maintain a fair distribution. Selection is
+scheduler first keeps only the eligible employees with the lowest workload in
+hours, so workload stays balanced. Among them, it calculates each candidate's
+average applicable synergy with employees already assigned on that date.
+Better synergy can increase the candidate's selection weight by up to 100
+times, and a higher shift count for the event type lowers it. Selection is
 randomized to avoid repeatedly generating the same pairs, while permission,
 rest, capacity, and exclusivity checks still apply.
 

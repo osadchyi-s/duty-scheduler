@@ -69,7 +69,9 @@ resources/views/filament/pages/
   auto-schedule.blade.php
   period-statistics.blade.php
 tests/Unit/          Constraints Engine and AutoScheduler tests
-docker-compose.yml, Dockerfile, Makefile, docker/
+docker-compose.yml           Local development stack
+compose.prod.yml, deploy/    Production and staging (see Production deployment)
+Dockerfile, Makefile, docker/
 ```
 
 ## Assignment constraints
@@ -265,6 +267,74 @@ php artisan migrate
 ```
 
 For a new environment, `make init` runs the migrations as part of setup.
+
+## Production deployment
+
+Production and staging run on one server, from the same images, separated by
+port (for example `http://10.0.0.5:8080` and `http://10.0.0.5:8081`). The local
+development stack (`docker-compose.yml`) is not used there.
+
+The `Dockerfile` has several build targets: `dev` (local development, code
+mounted from the host), `prod` (php-fpm application image with the code and
+production dependencies, also used for the queue worker), and `web` (nginx with
+`public/`). `compose.prod.yml` describes the stack of one environment: `app`,
+`worker`, `web` (the only published port), `db` (PostgreSQL), and `redis`.
+Each environment is a separate Compose project (`wfm_prod`, `wfm_staging`)
+with its own containers, network, and volumes, so the environments never share
+data.
+
+### First setup
+
+```bash
+cp deploy/prod.env.example deploy/prod.env
+cp deploy/staging.env.example deploy/staging.env
+deploy/deploy.sh key          # run twice and put a different APP_KEY into each env file
+# edit both files: APP_URL (server IP and port), DB_PASSWORD
+
+deploy/deploy.sh staging      # builds the images from the current commit and deploys them
+deploy/deploy.sh staging create-admin
+```
+
+The env files contain secrets and are not committed. Keep `APP_KEY` unchanged
+after the first deployment. Production and staging need different
+`SESSION_COOKIE` values: browsers do not separate cookies by port, so with the
+same name, signing in to one environment would sign you out of the other.
+
+### Releasing a version
+
+```bash
+git pull
+deploy/deploy.sh staging                 # build and deploy the current commit to staging, then test it
+deploy/deploy.sh prod <tag>              # promote the same images to production
+```
+
+`deploy/deploy.sh staging status` shows the tag running on staging. A
+production deployment first dumps the database to `deploy/backups/`, then runs
+migrations as a separate step and starts the new containers. To roll back,
+deploy a previous tag (database migrations are not rolled back automatically).
+
+Other commands: `deploy/deploy.sh <env> status|logs|backup|down` and
+`deploy/deploy.sh <env> artisan <command>`. Run `deploy/deploy.sh` without
+arguments for help.
+
+### Notes
+
+- Staging (`APP_ENV=staging`) has an amber color scheme and a banner on every
+  page, so it is not mistaken for production.
+- PostgreSQL and Redis publish no ports; open only the web ports in the
+  firewall, and only to the internal network.
+- Schedule regular backups of production, e.g. `deploy/deploy.sh prod backup`
+  from cron, and copy them off the server.
+- To use an external PostgreSQL server, set `DB_HOST` and the credentials in
+  the env file and remove the `db` service (and the `depends_on` on it) from
+  `compose.prod.yml`.
+- To start with existing data, dump the source database with
+  `pg_dump --no-owner --no-privileges` (the target database user may differ) and
+  run `deploy/deploy.sh <env> import <dump.sql[.gz]>` before the first
+  deployment; it only loads into an empty database. The deployment then
+  applies the remaining migrations.
+- The demo `UserSeeder` (password `password`) must not be run in production;
+  `create-admin` creates the first administrator instead.
 
 ## Docker services and commands
 

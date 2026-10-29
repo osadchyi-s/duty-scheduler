@@ -58,7 +58,9 @@ resources/views/filament/pages/
   duty-matrix.blade.php         ← сітка матриці, sticky-колонка, Alpine hover-підсвічування
   period-statistics.blade.php
 tests/Unit/ConstraintsEngineTest.php  ← Pest-тести на всі 4 рівні Constraints Engine
-docker-compose.yml, Dockerfile, Makefile, docker/
+docker-compose.yml           ← локальний стек розробки
+compose.prod.yml, deploy/    ← продакшн і staging (див. «Розгортання на продакшн»)
+Dockerfile, Makefile, docker/
 ```
 
 ## Як влаштована логіка обмежень (ключова частина ТЗ)
@@ -266,6 +268,74 @@ php artisan config:clear
 міграції командою `php artisan migrate` (або `make init` для нового середовища).
 - Docker Compose: app / webserver (nginx) / db (Postgres 16) / redis / worker (queue)
 - Makefile з усіма командами з ТЗ п.8.3
+
+## Розгортання на продакшн
+
+Продакшн і staging працюють на одному сервері з тих самих образів і
+розрізняються портом (наприклад, `http://10.0.0.5:8080` і
+`http://10.0.0.5:8081`). Локальний стек розробки (`docker-compose.yml`) там не
+використовується.
+
+`Dockerfile` має кілька цілей збірки: `dev` (локальна розробка, код
+монтується з диска), `prod` (образ застосунку php-fpm з кодом і продакшн-
+залежностями, він же для воркера черг) і `web` (nginx із `public/`).
+`compose.prod.yml` описує стек одного середовища: `app`, `worker`, `web`
+(єдиний відкритий порт), `db` (PostgreSQL) і `redis`. Кожне середовище — окремий
+Compose-проєкт (`wfm_prod`, `wfm_staging`) зі своїми контейнерами, мережею й
+томами, тож середовища ніколи не ділять дані.
+
+### Перше налаштування
+
+```bash
+cp deploy/prod.env.example deploy/prod.env
+cp deploy/staging.env.example deploy/staging.env
+deploy/deploy.sh key          # запустіть двічі й вставте різний APP_KEY у кожен env-файл
+# відредагуйте обидва файли: APP_URL (IP сервера й порт), DB_PASSWORD
+
+deploy/deploy.sh staging      # збирає образи з поточного коміту й розгортає їх
+deploy/deploy.sh staging create-admin
+```
+
+Env-файли містять секрети й не комітяться. Після першого розгортання
+`APP_KEY` не змінюйте. Продакшн і staging мають різні значення
+`SESSION_COOKIE`: браузер не розділяє cookies за портом, тож з однаковою
+назвою вхід в одне середовище викидав би з іншого.
+
+### Випуск версії
+
+```bash
+git pull
+deploy/deploy.sh staging                 # зібрати й розгорнути поточний коміт на staging, перевірити
+deploy/deploy.sh prod <tag>              # перенести ті самі образи на продакшн
+```
+
+`deploy/deploy.sh staging status` показує тег, що працює на staging.
+Розгортання на продакшн спершу зберігає дамп бази в `deploy/backups/`, потім
+окремим кроком виконує міграції й запускає нові контейнери. Щоб відкотитися,
+розгорніть попередній тег (міграції бази автоматично не відкочуються).
+
+Інші команди: `deploy/deploy.sh <env> status|logs|backup|down` і
+`deploy/deploy.sh <env> artisan <command>`. `deploy/deploy.sh` без аргументів
+показує довідку.
+
+### Примітки
+
+- Staging (`APP_ENV=staging`) має бурштинову кольорову схему й плашку на
+  кожній сторінці, щоб його не сплутати з продакшном.
+- PostgreSQL і Redis не відкривають портів; у фаєрволі відкрийте лише порти
+  web і лише для внутрішньої мережі.
+- Налаштуйте регулярні бекапи продакшна, наприклад `deploy/deploy.sh prod backup`
+  за cron, і копіюйте їх за межі сервера.
+- Щоб використати зовнішній PostgreSQL, задайте `DB_HOST` і облікові дані в
+  env-файлі та приберіть сервіс `db` (і `depends_on` на нього) з
+  `compose.prod.yml`.
+- Щоб почати з наявними даними, зробіть дамп вихідної бази
+  `pg_dump --no-owner --no-privileges` (користувач цільової бази може
+  відрізнятися) і виконайте `deploy/deploy.sh <env> import <dump.sql[.gz]>` до першого
+  розгортання; команда завантажує дані лише в порожню базу. Розгортання потім
+  застосує решту міграцій.
+- Демо-сідер `UserSeeder` (пароль `password`) у продакшні не запускайте;
+  перший адміністратор створюється командою `create-admin`.
 
 ## Що варто зробити першим (реалістичний roadmap)
 

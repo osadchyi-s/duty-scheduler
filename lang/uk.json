@@ -266,5 +266,6 @@
     "⚠️ Another draft of this month was approved on :date. Check the differences below.": "⚠️ Іншу чернетку цього місяця затверджено :date. Перевірте різницю нижче.",
     "Groups": "Групи",
     "Group": "Група",
-    "Groups this employee belongs to. Groups are used, for example, in duty limits.": "Групи, до яких входить співробітник. Групи використовуються, наприклад, у лімітах чергувань."
+    "Groups this employee belongs to. Groups are used, for example, in duty limits.": "Групи, до яких входить співробітник. Групи використовуються, наприклад, у лімітах чергувань.",
+    "Staging environment — for testing only. Changes here do not affect the production schedule.": "Тестове середовище (staging) — лише для перевірки. Зміни тут не впливають на робочий графік."
 }

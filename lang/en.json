@@ -266,5 +266,6 @@
     "⚠️ Another draft of this month was approved on :date. Check the differences below.": "⚠️ Another draft of this month was approved on :date. Check the differences below.",
     "Groups": "Groups",
     "Group": "Group",
-    "Groups this employee belongs to. Groups are used, for example, in duty limits.": "Groups this employee belongs to. Groups are used, for example, in duty limits."
+    "Groups this employee belongs to. Groups are used, for example, in duty limits.": "Groups this employee belongs to. Groups are used, for example, in duty limits.",
+    "Staging environment — for testing only. Changes here do not affect the production schedule.": "Staging environment — for testing only. Changes here do not affect the production schedule."
 }

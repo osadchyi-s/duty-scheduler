@@ -1,0 +1,87 @@
+# Production-like stack, used for both production and staging on one server.
+# Each environment runs as its own Compose project with its own env file, so
+# containers, networks and volumes never clash. Use deploy/deploy.sh rather
+# than calling this file directly; it sets the variables below:
+#   WFM_ENV_FILE - absolute path to the environment's env file (deploy/prod.env, deploy/staging.env)
+#   WFM_TAG      - image tag to run (built by "deploy/deploy.sh build")
+# Only the web container publishes a port (APP_PORT from the env file).
+
+x-app: &app
+  image: wfm-app:${WFM_TAG:?WFM_TAG is required}
+  env_file:
+    - ${WFM_ENV_FILE:?WFM_ENV_FILE is required}
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  volumes:
+    - storage:/var/www/storage/app
+
+services:
+  app:
+    <<: *app
+    mem_limit: ${WFM_APP_MEM_LIMIT:-1g}
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  worker:
+    <<: *app
+    command: ["php", "artisan", "queue:work", "redis", "--tries=3", "--sleep=2", "--max-time=3600"]
+    stop_grace_period: 60s
+    mem_limit: ${WFM_WORKER_MEM_LIMIT:-512m}
+
+  web:
+    image: wfm-web:${WFM_TAG:?WFM_TAG is required}
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:?APP_PORT is required}:80"
+    depends_on:
+      app:
+        condition: service_healthy
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:?DB_DATABASE is required}
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    mem_limit: ${WFM_DB_MEM_LIMIT:-1g}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
+  storage:

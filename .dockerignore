@@ -1,0 +1,33 @@
+# Keeps secrets, local state and development files out of the build context and images.
+.git
+.github
+.idea
+.vscode
+.DS_Store
+
+# Secrets: environments get their settings at runtime (see deploy/*.env.example).
+.env
+.env.*
+!.env.example
+deploy/*.env
+deploy/backups
+
+# Installed during the build.
+vendor
+node_modules
+
+# Generated at runtime; the committed package cache lists dev packages.
+bootstrap/cache/*.php
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/app/*
+public/storage
+
+# Not needed in images.
+tests
+.phpunit.result.cache
+phpunit.xml
+docker-compose.yml
+compose.prod.yml

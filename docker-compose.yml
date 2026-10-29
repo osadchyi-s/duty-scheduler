@@ -1,8 +1,11 @@
+# Local development stack (code mounted from the host). Production and staging
+# use compose.prod.yml and deploy/deploy.sh instead.
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     container_name: wfm_app
     restart: no
     working_dir: /var/www
@@ -58,6 +61,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     container_name: wfm_worker
     restart: no
     working_dir: /var/www

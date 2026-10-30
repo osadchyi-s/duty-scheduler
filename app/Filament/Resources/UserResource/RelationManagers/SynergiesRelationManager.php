@@ -16,6 +16,20 @@ class SynergiesRelationManager extends RelationManager
 {
     protected static string $relationship = 'synergies';
 
+    protected const SCORE_NEGATIVE = -1;
+
+    protected const SCORE_NEUTRAL = 0;
+
+    protected const SCORE_POSITIVE = 1;
+
+    protected const SCORES = [self::SCORE_NEGATIVE, self::SCORE_NEUTRAL, self::SCORE_POSITIVE];
+
+    protected const SCORE_COLORS = [
+        self::SCORE_NEGATIVE => 'rgb(var(--danger-500))',
+        self::SCORE_NEUTRAL => 'rgb(var(--gray-400))',
+        self::SCORE_POSITIVE => 'rgb(var(--success-500))',
+    ];
+
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
         return __('Synergy');
@@ -34,8 +48,12 @@ class SynergiesRelationManager extends RelationManager
             Forms\Components\ViewField::make('score')
                 ->label(__('Synergy level'))
                 ->view('filament.forms.components.synergy-score')
-                ->default(0)
-                ->rules(['required', 'integer']),
+                ->viewData(['scoreColors' => self::SCORE_COLORS])
+                ->default((string) self::SCORE_NEUTRAL)
+                // Older records may hold any integer; show them by their sign.
+                ->formatStateUsing(fn ($state): string => (string) self::normalizeScore($state))
+                ->dehydrateStateUsing(fn ($state): int => self::normalizeScore($state))
+                ->rules([Rule::in(array_map('strval', self::SCORES))]),
             Forms\Components\Select::make('eventTypes')
                 ->label(__('Event types'))
                 ->relationship('eventTypes', 'name')
@@ -55,14 +73,9 @@ class SynergiesRelationManager extends RelationManager
                     ->state(fn ($record): string => (int) $record->user_a_id === (int) $this->getOwnerRecord()->getKey()
                         ? $record->userB->name
                         : $record->userA->name),
-                Tables\Columns\TextColumn::make('score')
+                Tables\Columns\ColorColumn::make('score')
                     ->label(__('Synergy'))
-                    ->badge()
-                    ->color(fn (int $state): string => match (true) {
-                        $state < 0 => 'danger',
-                        $state > 0 => 'success',
-                        default => 'gray',
-                    }),
+                    ->getStateUsing(fn ($record): string => self::SCORE_COLORS[self::normalizeScore($record->score)]),
                 Tables\Columns\TextColumn::make('eventTypes.name')
                     ->label(__('Event types'))
                     ->badge()
@@ -84,6 +97,14 @@ class SynergiesRelationManager extends RelationManager
             ])
             ->emptyStateHeading(__('No synergies have been added yet'))
             ->modifyQueryUsing(fn (Builder $query) => $query->with(['userA', 'userB', 'eventTypes']));
+    }
+
+    /**
+     * Synergy is a three-state value: negative (-1), neutral (0 or empty), positive (1).
+     */
+    protected static function normalizeScore(mixed $state): int
+    {
+        return $state === null || $state === '' ? self::SCORE_NEUTRAL : (int) ($state <=> 0);
     }
 
     protected function counterpartUsers(): Builder

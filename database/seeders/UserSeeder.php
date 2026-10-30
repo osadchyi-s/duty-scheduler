@@ -59,7 +59,7 @@ class UserSeeder extends Seeder
             );
             $employee->syncRoles(['User']);
 
-            // Даємо кожному співробітнику допуск до чергувань + відпустки/лікарняного за замовчуванням.
+            // Give every employee access to duties plus vacation/sick leave by default.
             $employee->allowedEventTypes()->syncWithoutDetaching($allEventTypeIds);
         }
 

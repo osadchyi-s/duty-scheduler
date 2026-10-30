@@ -3,7 +3,9 @@
 namespace App\Exports;
 
 use App\Models\EventType;
+use App\Models\ScheduleDraft;
 use App\Models\User;
+use App\Support\TimeUnit;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithEvents;
@@ -13,7 +15,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 /**
- * Експорт матриці чергувань за місяць у .xlsx зі збереженням візуального стилю (ТЗ п.7).
+ * Monthly duty matrix export to .xlsx that keeps the visual style (spec 7).
  */
 class ScheduleExport implements FromArray, WithStyles, WithEvents
 {
@@ -23,9 +25,12 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
 
     protected array $eventCellColors = [];
 
-    public function __construct(protected string $month)
+    /**
+     * @param  int|null  $draftId  schedule draft to export; null exports the approved schedule
+     */
+    public function __construct(protected string $month, protected ?int $draftId = null)
     {
-        $this->monthStart = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        $this->monthStart = Carbon::createFromFormat('!Y-m', $month)->startOfMonth();
         $this->monthEnd = $this->monthStart->copy()->endOfMonth();
     }
 
@@ -37,29 +42,34 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
         for ($d = $this->monthStart->copy(); $d->lte($this->monthEnd); $d->addDay()) {
             $header[] = $d->format('d.m');
         }
-        $header[] = __('Total hours');
+        $header[] = TimeUnit::usesDays() ? __('Total days') : __('Total hours');
         $header[] = __('Shifts');
         $rows[] = $header;
 
+        $draft = $this->draftId ? ScheduleDraft::findOrFail($this->draftId) : null;
+
+        $eventsInMonth = fn ($q) => $q->inScenario($draft)
+            ->where('status', '!=', 'cancelled')
+            ->overlappingPeriod($this->monthStart, $this->monthEnd);
+
+        // Same rows as the matrix: inactive employees only while they have events in the month.
         $employees = User::whereHas('roles', fn ($q) => $q->whereIn('name', ['User', 'Manager', 'Admin']))
-            ->where('is_active', true)
-            ->with(['events' => function ($q) {
-                $q->where('status', '!=', 'cancelled')
-                    ->overlappingPeriod($this->monthStart, $this->monthEnd)
-                    ->with('eventType');
-            }])
+            ->where(fn ($q) => $q->where('is_active', true)->orWhereHas('events', $eventsInMonth))
+            ->with(['events' => fn ($q) => $eventsInMonth($q)->with('eventType')])
+            ->orderByDesc('is_active')
             ->orderBy('name')
             ->get();
 
         foreach ($employees as $rowIndex => $employee) {
-            $row = [$employee->name];
+            $row = [$employee->is_active ? $employee->name : $employee->name.' ('.__('inactive').')'];
             $totalHours = 0;
             $shiftCount = 0;
+            $countedEventIds = [];
 
             $eventsByDate = [];
             foreach ($employee->events as $event) {
                 $eventStartDate = $event->starts_at->copy()->startOfDay();
-                $eventEndDate = $event->ends_at->copy()->startOfDay();
+                $eventEndDate = $event->lastCoveredDay();
 
                 for ($date = $eventStartDate->copy(); $date->lte($eventEndDate); $date->addDay()) {
                     $eventsByDate[$date->format('Y-m-d')][] = $event;
@@ -75,11 +85,15 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
                     $names = [];
                     foreach ($dayEvents as $ev) {
                         $names[] = $ev->eventType->code;
-                        if ($ev->eventType->is_work_time) {
-                            $totalHours += $ev->durationHours();
+                        // A multi-day event is shown on every day but counted in the totals once.
+                        if (! isset($countedEventIds[$ev->id])) {
+                            $countedEventIds[$ev->id] = true;
+                            if ($ev->eventType->is_work_time) {
+                                $totalHours += $ev->durationHours();
+                            }
+                            $shiftCount++;
                         }
-                        $shiftCount++;
-                        // Excel-координати заповнюємо пізніше в AfterSheet (rowIndex+2, colIndex+2)
+                        // Excel coordinates are filled in later in AfterSheet (rowIndex+2, colIndex+2)
                         $this->eventCellColors[($rowIndex + 2).'_'.($colIndex + 1)] = ltrim($ev->eventType->color_code, '#');
                     }
                     $row[] = implode(',', $names);
@@ -94,7 +108,7 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
                 $colIndex++;
             }
 
-            $row[] = round($totalHours, 1);
+            $row[] = round(TimeUnit::toDisplay($totalHours), 1);
             $row[] = $shiftCount;
             $rows[] = $row;
         }
@@ -120,7 +134,7 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
                 foreach ($this->eventCellColors as $key => $color) {
                     [$row, $col] = array_pad(explode('_', $key), 2, null);
                     if (str_ends_with($key, '_weekend')) {
-                        continue; // спрощено: основний колір типу події має пріоритет
+                        continue; // simplified: the event type color takes precedence
                     }
                     $cellCoordinate = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col).$row;
                     $sheet->getStyle($cellCoordinate)->getFill()

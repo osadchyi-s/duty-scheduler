@@ -5,6 +5,7 @@ use App\Models\Synergy;
 use App\Models\User;
 use App\Models\UserEvent;
 use App\Services\AutoScheduler;
+use App\Services\ScheduleDraftService;
 use Carbon\Carbon;
 use Spatie\Permission\Models\Role;
 
@@ -35,7 +36,7 @@ beforeEach(function () {
 
 it('fills min_capacity for every day in the period', function () {
     $from = Carbon::parse('2026-09-01');
-    $to = Carbon::parse('2026-09-05');
+    $to = Carbon::parse('2026-09-05')->endOfDay();
 
     $result = $this->scheduler->generate($from, $to, [$this->dutyType->id]);
 
@@ -47,7 +48,7 @@ it('fills min_capacity for every day in the period', function () {
 
 it('distributes shifts fairly across eligible users', function () {
     $from = Carbon::parse('2026-09-01');
-    $to = Carbon::parse('2026-09-06'); // 6 днів, 3 людини -> по 2 зміни кожному (з урахуванням min_rest=24)
+    $to = Carbon::parse('2026-09-06'); // 6 days, 3 people -> 2 shifts each (taking min_rest=24 into account)
 
     $this->scheduler->generate($from, $to, [$this->dutyType->id]);
 
@@ -56,13 +57,13 @@ it('distributes shifts fairly across eligible users', function () {
         ->groupBy('user_id')
         ->map->count();
 
-    // Жоден співробітник не повинен отримати істотно більше змін за інших.
+    // No employee should get noticeably more shifts than the others.
     expect($counts->max() - $counts->min())->toBeLessThanOrEqual(1);
 });
 
 it('records a deficit when no eligible user passes the constraints', function () {
-    // Лише один співробітник з допуском, чергування 24г/48г бажаного відпочинку -
-    // на другий день поспіль buде forbidden (rest < 24h).
+    // Only one permitted employee, 24h duty with 48h preferred rest:
+    // the second day in a row is forbidden (rest < 24h).
     $lonelyType = EventType::create([
         'name' => 'Ексклюзивне чергування', 'code' => 'solo_duty', 'color_code' => '#000000',
         'is_blocking' => false, 'min_capacity' => 1, 'max_capacity' => 1,
@@ -78,7 +79,7 @@ it('records a deficit when no eligible user passes the constraints', function ()
     $solo->allowedEventTypes()->attach($lonelyType->id);
 
     $from = Carbon::parse('2026-09-01');
-    $to = Carbon::parse('2026-09-02'); // два дні поспіль -> другий день неможливо заповнити
+    $to = Carbon::parse('2026-09-02')->endOfDay(); // two days in a row -> the second day cannot be filled
 
     $result = $this->scheduler->generate($from, $to, [$lonelyType->id]);
 
@@ -120,7 +121,7 @@ it('does not assign one employee overlapping shifts of different event types', f
         ->and($result->deficitCount())->toBe(1);
 });
 
-it('deletes only selected draft assignments when replacing drafts', function () {
+it('generates into a draft without touching the approved schedule', function () {
     $approved = UserEvent::create([
         'user_id' => $this->users[0]->id,
         'event_type_id' => $this->dutyType->id,
@@ -128,27 +129,30 @@ it('deletes only selected draft assignments when replacing drafts', function () 
         'ends_at' => Carbon::parse('2026-12-09 08:00'),
         'status' => 'approved',
     ]);
-    $draft = UserEvent::create([
-        'user_id' => $this->users[1]->id,
-        'event_type_id' => $this->dutyType->id,
-        'starts_at' => Carbon::parse('2026-12-08 08:00'),
-        'ends_at' => Carbon::parse('2026-12-09 08:00'),
-        'status' => 'draft',
-    ]);
+    $draft = app(ScheduleDraftService::class)->create(Carbon::parse('2026-12-01'), null);
 
     $result = $this->scheduler->generate(
         Carbon::parse('2026-12-08'),
-        Carbon::parse('2026-12-08')->endOfDay(),
+        Carbon::parse('2026-12-09')->endOfDay(),
         [$this->dutyType->id],
-        existingEvents: AutoScheduler::EXISTING_DELETE_DRAFTS,
+        existingEvents: AutoScheduler::EXISTING_DELETE_ALL,
+        draft: $draft,
     );
 
+    // The draft copy of the approved event is replaced; the approved event itself stays.
     expect(UserEvent::find($approved->id))->not->toBeNull()
-        ->and(UserEvent::find($draft->id))->toBeNull()
-        ->and($result->deletedCount)->toBe(1);
+        ->and(UserEvent::whereNull('schedule_draft_id')->count())->toBe(1)
+        ->and($result->deletedCount)->toBe(1)
+        ->and($draft->events()->count())->toBe(2);
 });
 
-it('deletes approved and draft assignments for selected event types when replacing all', function () {
+it('rejects a generation period outside the draft month', function () {
+    $draft = app(ScheduleDraftService::class)->create(Carbon::parse('2026-12-01'), null);
+
+    $this->scheduler->generate(Carbon::parse('2026-11-30'), Carbon::parse('2026-12-02')->endOfDay(), [$this->dutyType->id], draft: $draft);
+})->throws(InvalidArgumentException::class);
+
+it('deletes active assignments of the selected event types when replacing all', function () {
     $approved = UserEvent::create([
         'user_id' => $this->users[0]->id,
         'event_type_id' => $this->dutyType->id,
@@ -156,12 +160,12 @@ it('deletes approved and draft assignments for selected event types when replaci
         'ends_at' => Carbon::parse('2026-12-09 08:00'),
         'status' => 'approved',
     ]);
-    $draft = UserEvent::create([
+    $second = UserEvent::create([
         'user_id' => $this->users[1]->id,
         'event_type_id' => $this->dutyType->id,
         'starts_at' => Carbon::parse('2026-12-08 08:00'),
         'ends_at' => Carbon::parse('2026-12-09 08:00'),
-        'status' => 'draft',
+        'status' => 'approved',
     ]);
     $cancelled = UserEvent::create([
         'user_id' => $this->users[2]->id,
@@ -179,7 +183,7 @@ it('deletes approved and draft assignments for selected event types when replaci
     );
 
     expect(UserEvent::find($approved->id))->toBeNull()
-        ->and(UserEvent::find($draft->id))->toBeNull()
+        ->and(UserEvent::find($second->id))->toBeNull()
         ->and(UserEvent::find($cancelled->id))->not->toBeNull()
         ->and($result->deletedCount)->toBe(2);
 });

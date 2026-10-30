@@ -9,6 +9,10 @@ use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Enums\MaxWidth;
+use Filament\View\PanelsRenderHook;
+use Filament\FontProviders\LocalFontProvider;
+use App\Filament\AvatarProviders\LocalAvatarProvider;
 use App\Http\Middleware\ApplyConfiguredLocale;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -26,9 +30,24 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            // Inter font is hosted locally (public/fonts/inter + public/css/filament-fonts.css)
+            // so the app does not fetch CSS/fonts from an external CDN and works offline without timeouts.
+            ->font('Inter', url: asset('css/filament-fonts.css'), provider: LocalFontProvider::class)
+            // Default avatars are generated locally (see LocalAvatarProvider) instead of
+            // being fetched from ui-avatars.com, keeping the app free of external requests.
+            ->defaultAvatarProvider(LocalAvatarProvider::class)
+            // Staging runs on the same server IP as production (another port), so it gets
+            // a different primary color and a banner to avoid working in the wrong one.
             ->colors([
-                'primary' => Color::Blue,
+                'primary' => app()->environment('staging') ? Color::Amber : Color::Blue,
             ])
+            ->renderHook(
+                PanelsRenderHook::BODY_START,
+                fn (): string => app()->environment('staging') ? view('filament.staging-banner')->render() : '',
+            )
+            // Use the full page width (instead of the default 80rem container) on every page,
+            // so tables such as the duty matrix, users or duty limits stretch across wide monitors.
+            ->maxContentWidth(MaxWidth::Full)
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([

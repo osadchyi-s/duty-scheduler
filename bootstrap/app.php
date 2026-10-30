@@ -11,7 +11,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // Filament Panel Provider реєструє власний middleware-стек (auth, sessions, тощо).
+        // The Filament panel provider registers its own middleware stack (auth, sessions, etc.).
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

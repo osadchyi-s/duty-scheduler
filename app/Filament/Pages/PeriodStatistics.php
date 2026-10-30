@@ -13,7 +13,7 @@ use Filament\Forms\Form;
 use Filament\Pages\Page;
 
 /**
- * Аналітичний звіт за довільний період (ТЗ п.6.2).
+ * Analytics report for an arbitrary period (spec 6.2), based on the approved schedule only.
  */
 class PeriodStatistics extends Page implements HasForms
 {
@@ -64,13 +64,14 @@ class PeriodStatistics extends Page implements HasForms
     }
 
     /**
-     * Таблиця розподілу навантаження: к-сть подій кожного типу для кожного співробітника.
+     * Workload distribution table: number of events of each type per employee.
      */
     public function getWorkloadTableProperty(): array
     {
         [$from, $to] = $this->bounds();
 
         $events = UserEvent::query()
+            ->inScenario(null)
             ->where('status', '!=', 'cancelled')
             ->whereBetween('starts_at', [$from, $to])
             ->with(['user', 'eventType'])
@@ -86,7 +87,7 @@ class PeriodStatistics extends Page implements HasForms
     }
 
     /**
-     * Аналіз кадрового дефіциту: дати, коли покриття було на рівні min_capacity або нижче.
+     * Staffing deficit analysis: dates when coverage was below min_capacity.
      */
     public function getDeficitDatesProperty(): array
     {
@@ -97,6 +98,7 @@ class PeriodStatistics extends Page implements HasForms
         for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
             foreach ($eventTypes as $type) {
                 $count = UserEvent::query()
+                    ->inScenario(null)
                     ->where('event_type_id', $type->id)
                     ->where('status', '!=', 'cancelled')
                     ->overlappingPeriod($d->copy()->startOfDay(), $d->copy()->endOfDay())
@@ -117,16 +119,16 @@ class PeriodStatistics extends Page implements HasForms
     }
 
     /**
-     * Коефіцієнт використання винятків: % змін з has_rest_warning = true.
+     * Exception rate: percentage of shifts with has_warning = true.
      */
     public function getExceptionRateProperty(): array
     {
         [$from, $to] = $this->bounds();
 
-        $total = UserEvent::whereBetween('starts_at', [$from, $to])
+        $total = UserEvent::inScenario(null)->whereBetween('starts_at', [$from, $to])
             ->where('status', '!=', 'cancelled')->count();
-        $withWarning = UserEvent::whereBetween('starts_at', [$from, $to])
-            ->where('status', '!=', 'cancelled')->where('has_rest_warning', true)->count();
+        $withWarning = UserEvent::inScenario(null)->whereBetween('starts_at', [$from, $to])
+            ->where('status', '!=', 'cancelled')->where('has_warning', true)->count();
 
         return [
             'total' => $total,

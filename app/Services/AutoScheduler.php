@@ -3,31 +3,31 @@
 namespace App\Services;
 
 use App\Models\EventType;
+use App\Models\ScheduleDraft;
 use App\Models\Synergy;
 use App\Models\User;
 use App\Models\UserEvent;
+use App\Support\MatrixCache;
+use App\Support\TimeUnit;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Автоматичний розподіл чергувань наперед на заданий період.
+ * Automatic duty assignment for a given future period.
  *
- * Алгоритм — жадібний (greedy) із балансуванням навантаження:
- *   для кожного дня періоду і кожного обраного "розкладного" типу події
- *   бере список допущених співробітників (user_event_type_permissions),
- *   перевіряє кожного через ConstraintsEngine і випадково обирає з допустимих,
- *   зважуючи вибір синергією та балансом навантаження.
+ * The algorithm is greedy with workload balancing: for each day of the period
+ * and each selected schedulable event type it takes the permitted employees
+ * (user_event_type_permissions), validates each through ConstraintsEngine and
+ * picks one at random among the least loaded valid candidates, weighted by synergy.
  *
- * Все, що створюється — статус `draft`: менеджер переглядає й затверджує
- * в самій Матриці чергувань, нічого не потрапляє в графік "наосліп".
+ * The UI always generates into a schedule draft: a manager reviews it in the
+ * duty matrix and approves the whole draft, so nothing gets into the
+ * approved schedule unreviewed.
  */
 class AutoScheduler
 {
     public const EXISTING_FILL_MISSING = 'fill_missing';
-
-    public const EXISTING_DELETE_DRAFTS = 'delete_drafts';
 
     public const EXISTING_DELETE_ALL = 'delete_all';
 
@@ -37,6 +37,7 @@ class AutoScheduler
 
     /**
      * @param  Collection<int, EventType>|array<int>  $eventTypeIds
+     * @param  ScheduleDraft|null  $draft  draft to generate into; null means the approved schedule
      */
     public function generate(
         Carbon $from,
@@ -44,13 +45,17 @@ class AutoScheduler
         array $eventTypeIds,
         bool $fillToMax = false,
         string $existingEvents = self::EXISTING_FILL_MISSING,
+        ?ScheduleDraft $draft = null,
     ): AutoScheduleResult {
-        if (! in_array($existingEvents, [
-            self::EXISTING_FILL_MISSING,
-            self::EXISTING_DELETE_DRAFTS,
-            self::EXISTING_DELETE_ALL,
-        ], true)) {
+        if (! in_array($existingEvents, [self::EXISTING_FILL_MISSING, self::EXISTING_DELETE_ALL], true)) {
             throw new \InvalidArgumentException('Unknown existing event handling mode.');
+        }
+
+        if ($draft) {
+            [$draftStart, $draftEnd] = $draft->window();
+            if ($from->lt($draftStart) || $to->gte($draftEnd)) {
+                throw new \InvalidArgumentException('The period must lie within the drafted month.');
+            }
         }
 
         $result = new AutoScheduleResult;
@@ -70,33 +75,31 @@ class AutoScheduler
             ->get();
 
         $workloadHours = [];
-        $shiftCounts = []; // [user_id][event_type_id] => к-сть змін, призначених у цьому запуску
+        $shiftCounts = []; // [user_id][event_type_id] => number of shifts assigned in this run
         $synergies = Synergy::with('eventTypes:id')->get()->keyBy(
             fn (Synergy $synergy): string => $this->synergyPairKey($synergy->user_a_id, $synergy->user_b_id)
         );
 
-        $result->deletedCount = DB::transaction(function () use ($eventTypes, $activeUsers, $from, $to, $fillToMax, $existingEvents, &$workloadHours, &$shiftCounts, $synergies, $result): int {
+        $result->deletedCount = DB::transaction(function () use ($eventTypes, $activeUsers, $from, $to, $fillToMax, $existingEvents, &$workloadHours, &$shiftCounts, $synergies, $result, $draft): int {
             $deletedCount = 0;
 
-            if ($existingEvents !== self::EXISTING_FILL_MISSING) {
-                $existingQuery = UserEvent::query()
+            if ($existingEvents === self::EXISTING_DELETE_ALL) {
+                // Only events of this scenario itself, never approved events outside a draft.
+                $deletedCount = UserEvent::query()
+                    ->where('schedule_draft_id', $draft?->id)
                     ->whereIn('event_type_id', $eventTypes->pluck('id'))
                     ->where('status', '!=', 'cancelled')
-                    ->overlappingPeriod($from, $to);
-
-                if ($existingEvents === self::EXISTING_DELETE_DRAFTS) {
-                    $existingQuery->where('status', 'draft');
-                }
-
-                $deletedCount = $existingQuery->delete();
+                    ->overlappingPeriod($from, $to)
+                    ->delete();
             }
 
             // Calculate workload only after optional removal, so deleted shifts
             // do not distort fairness for the assignments created in this run.
-            $workloadHours = $this->initialWorkload($activeUsers, $from, $to);
+            $workloadHours = $this->initialWorkload($activeUsers, $from, $to, $draft);
 
             for ($day = $from->copy()->startOfDay(); $day->lte($to); $day->addDay()) {
-                $assignedUsersToday = UserEvent::whereIn('event_type_id', $eventTypes->pluck('id'))
+                $assignedUsersToday = UserEvent::inScenario($draft)
+                    ->whereIn('event_type_id', $eventTypes->pluck('id'))
                     ->where('status', '!=', 'cancelled')
                     ->overlappingPeriod($day->copy()->startOfDay(), $day->copy()->endOfDay())
                     ->pluck('user_id')
@@ -104,17 +107,14 @@ class AutoScheduler
                     ->flip();
 
                 foreach ($eventTypes as $eventType) {
-                    $this->fillSlot($eventType, $day, $activeUsers, $fillToMax, $workloadHours, $shiftCounts, $synergies, $assignedUsersToday, $result, $to);
+                    $this->fillSlot($eventType, $day, $activeUsers, $fillToMax, $workloadHours, $shiftCounts, $synergies, $assignedUsersToday, $result, $to, $draft);
                 }
             }
 
             return $deletedCount;
         });
 
-        for ($month = $from->copy()->startOfMonth(); $month->lte($to); $month->addMonth()) {
-            Cache::forget('wfm:matrix:'.$month->format('Y-m'));
-            Cache::forget('wfm:coverage:'.$month->format('Y-m'));
-        }
+        MatrixCache::forgetRange($from, $to, $draft?->id);
 
         return $result;
     }
@@ -130,9 +130,10 @@ class AutoScheduler
         Collection $assignedUsersToday,
         AutoScheduleResult $result,
         Carbon $rangeEnd,
+        ?ScheduleDraft $draft = null,
     ): void {
         if (! $eventType->default_duration_hours) {
-            return; // неможливо розрахувати ends_at без тривалості — пропускаємо (див. форму типу події)
+            return; // ends_at cannot be calculated without a duration, so skip (see the event type form)
         }
 
         $target = $fillToMax && $eventType->max_capacity
@@ -143,14 +144,16 @@ class AutoScheduler
             return;
         }
 
-        $startsAt = $day->copy()->setTimeFromTimeString($eventType->default_start_time ?? '08:00:00');
-        $endsAt = $startsAt->copy()->addHours($eventType->default_duration_hours);
+        $durationHours = TimeUnit::normalizeDurationHours($eventType->default_duration_hours);
+        $startsAt = TimeUnit::shiftStart($day, $eventType->default_start_time);
+        $endsAt = $startsAt->copy()->addHours($durationHours);
 
         if ($startsAt->gt($rangeEnd)) {
-            return; // не створюємо подію, яка починається після кінця вибраного періоду
+            return; // do not create an event that starts after the end of the selected period
         }
 
-        $existingCount = UserEvent::where('event_type_id', $eventType->id)
+        $existingCount = UserEvent::inScenario($draft)
+            ->where('event_type_id', $eventType->id)
             ->where('status', '!=', 'cancelled')
             ->overlappingPeriod($startsAt, $endsAt)
             ->count();
@@ -160,7 +163,8 @@ class AutoScheduler
             return;
         }
 
-        $assignedTodayThisType = UserEvent::where('event_type_id', $eventType->id)
+        $assignedTodayThisType = UserEvent::inScenario($draft)
+            ->where('event_type_id', $eventType->id)
             ->where('status', '!=', 'cancelled')
             ->overlappingPeriod($startsAt, $endsAt)
             ->pluck('user_id')
@@ -185,7 +189,7 @@ class AutoScheduler
             $validCandidates = [];
 
             foreach ($candidates as $candidate) {
-                $check = $this->engine->validate($candidate, $eventType, $startsAt, $endsAt);
+                $check = $this->engine->validate($candidate, $eventType, $startsAt, $endsAt, null, $draft);
 
                 if (! $check->isAllowed) {
                     continue;
@@ -199,28 +203,29 @@ class AutoScheduler
             }
 
             if ($validCandidates === []) {
-                break; // жодного придатного кандидата не залишилось — фіксуємо дефіцит
+                break; // no eligible candidates left, so record a deficit
             }
 
-            $selected = $this->chooseCandidate($validCandidates, $workloadHours, $shiftCounts, $eventType);
+            $selected = $this->chooseCandidate($validCandidates, $workloadHours, $shiftCounts, $eventType->id);
             /** @var User $candidate */
             $candidate = $selected['user'];
             /** @var ConstraintCheckResult $check */
             $check = $selected['check'];
 
             UserEvent::create([
+                'schedule_draft_id' => $draft?->id,
                 'user_id' => $candidate->id,
                 'event_type_id' => $eventType->id,
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
-                'status' => 'draft',
-                'has_rest_warning' => $check->status === ConstraintCheckResult::STATUS_WARNING,
+                'status' => 'approved',
+                'has_warning' => $check->status === ConstraintCheckResult::STATUS_WARNING,
                 'warning_reason' => $check->reason,
                 'note' => 'system:auto-generated',
             ]);
 
             if ($eventType->is_work_time) {
-                $workloadHours[$candidate->id] = ($workloadHours[$candidate->id] ?? 0) + $eventType->default_duration_hours;
+                $workloadHours[$candidate->id] = ($workloadHours[$candidate->id] ?? 0) + $durationHours;
             }
             $shiftCounts[$candidate->id][$eventType->id] = ($shiftCounts[$candidate->id][$eventType->id] ?? 0) + 1;
             $assignedTodayThisType->put($candidate->id, true);
@@ -278,16 +283,25 @@ class AutoScheduler
     }
 
     /**
-     * Draws a weighted random candidate: higher synergy can receive up to 100
-     * times the weight, while workload and shift counts still favor fairness.
+     * Picks a candidate in two steps: only the employees with the lowest
+     * workload (hours) remain, then one of them is drawn at random. Among them,
+     * higher synergy can receive up to 100 times the weight, while a higher
+     * shift count for this event type lowers it.
      */
-    protected function chooseCandidate(array $candidates, array $workloadHours, array $shiftCounts, EventType $eventType): array
+    protected function chooseCandidate(array $candidates, array $workloadHours, array $shiftCounts, int $eventTypeId): array
     {
+        $workloadOf = fn (array $item): float => (float) ($workloadHours[$item['user']->id] ?? 0);
+        $minWorkload = min(array_map($workloadOf, $candidates));
+        // Workload may be fractional (events of arbitrary length), so compare with a tolerance.
+        $candidates = array_values(array_filter(
+            $candidates,
+            fn (array $item): bool => $workloadOf($item) - $minWorkload < 0.001
+        ));
+
         $scores = array_column($candidates, 'synergy');
         $minScore = min($scores);
         $maxScore = max($scores);
-        $minWorkload = min(array_map(fn (array $item): int => $workloadHours[$item['user']->id] ?? 0, $candidates));
-        $minShiftCount = min(array_map(fn (array $item): int => $shiftCounts[$item['user']->id][$eventType->id] ?? 0, $candidates));
+        $minShiftCount = min(array_map(fn (array $item): int => $shiftCounts[$item['user']->id][$eventTypeId] ?? 0, $candidates));
         $weightedCandidates = [];
         $totalWeight = 0;
 
@@ -296,10 +310,8 @@ class AutoScheduler
                 ? 0
                 : ($candidate['synergy'] - $minScore) / ($maxScore - $minScore);
             $synergyWeight = (int) round(1000 * (100 ** $synergyLevel));
-            $workloadDifference = ($workloadHours[$candidate['user']->id] ?? 0) - $minWorkload;
-            $shiftDifference = ($shiftCounts[$candidate['user']->id][$eventType->id] ?? 0) - $minShiftCount;
-            $fairnessFactor = 1 + ($workloadDifference / max(1, $eventType->default_duration_hours)) + $shiftDifference;
-            $weight = max(1, (int) round($synergyWeight / $fairnessFactor));
+            $shiftDifference = ($shiftCounts[$candidate['user']->id][$eventTypeId] ?? 0) - $minShiftCount;
+            $weight = max(1, (int) round($synergyWeight / (1 + $shiftDifference)));
 
             $weightedCandidates[] = ['candidate' => $candidate, 'weight' => $weight];
             $totalWeight += $weight;
@@ -323,12 +335,13 @@ class AutoScheduler
     }
 
     /**
-     * Стартове навантаження (год) кожного співробітника за вже наявними подіями в періоді —
-     * щоб автогенерація "добудовувала" графік рівномірно, а не ігнорувала вже призначене вручну.
+     * Initial workload (hours) of each employee from existing events in the period,
+     * so auto-generation completes the schedule evenly instead of ignoring manual assignments.
      */
-    protected function initialWorkload(Collection $users, Carbon $from, Carbon $to): array
+    protected function initialWorkload(Collection $users, Carbon $from, Carbon $to, ?ScheduleDraft $draft = null): array
     {
-        $existing = UserEvent::whereIn('user_id', $users->pluck('id'))
+        $existing = UserEvent::inScenario($draft)
+            ->whereIn('user_id', $users->pluck('id'))
             ->where('status', '!=', 'cancelled')
             ->overlappingPeriod($from, $to)
             ->with('eventType:id,is_work_time')

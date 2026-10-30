@@ -3,7 +3,7 @@
 namespace App\Services;
 
 /**
- * Результат перевірки обмежень (Constraints Engine) перед збереженням user_event.
+ * Result of the constraint check (Constraints Engine) before a user_event is saved.
  */
 class ConstraintCheckResult
 {

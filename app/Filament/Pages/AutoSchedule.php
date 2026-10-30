@@ -14,6 +14,7 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -62,9 +63,11 @@ class AutoSchedule extends Page implements HasForms
     public static function defaultFormData(?string $month = null): array
     {
         $start = Carbon::createFromFormat('!Y-m', $month ?? now()->format('Y-m'))->startOfMonth();
+        // For the current month, start from today rather than generating for days that have passed.
+        $from = today()->between($start, $start->copy()->endOfMonth()) ? today() : $start;
 
         return [
-            'from' => $start->format('Y-m-d'),
+            'from' => $from->format('Y-m-d'),
             'to' => $start->copy()->endOfMonth()->format('Y-m-d'),
             'event_type_ids' => EventType::where('min_capacity', '>', 0)
                 ->where('is_active', true)
@@ -94,6 +97,14 @@ class AutoSchedule extends Page implements HasForms
                         ->label(__('To date'))
                         ->required()
                         ->afterOrEqual('from'),
+                    Forms\Components\Placeholder::make('past_period_warning')
+                        ->hiddenLabel()
+                        ->columnSpanFull()
+                        ->content(fn (Forms\Get $get): HtmlString => new HtmlString('<span style="color: rgb(217 119 6); font-weight: 500;">'
+                            .e(__('⚠️ The period starts on a past date (:date). Assignments will also be generated for days that have already passed.', [
+                                'date' => Carbon::parse($get('from'))->format('d.m.Y'),
+                            ])).'</span>'))
+                        ->visible(fn (Forms\Get $get): bool => filled($get('from')) && Carbon::parse($get('from'))->lt(today())),
                     $withDraftSelect
                         ? Forms\Components\Select::make('draft_id')
                             ->label(__('Draft'))

@@ -28,6 +28,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Url;
@@ -472,6 +473,19 @@ class DutyMatrix extends Page implements HasForms, HasActions
         });
     }
 
+    /**
+     * Days before today are dimmed in the matrix; assigning on them shows a warning.
+     */
+    public function isPastDay(Carbon $day): bool
+    {
+        return $day->copy()->startOfDay()->lt(today());
+    }
+
+    protected function isPastDate(?string $value): bool
+    {
+        return filled($value) && $this->isPastDay(Carbon::parse($value));
+    }
+
     public function getEventTypesProperty(): Collection
     {
         return Cache::remember('wfm:event_types:active', now()->addHour(), function () {
@@ -586,6 +600,11 @@ class DutyMatrix extends Page implements HasForms, HasActions
                     ->helperText(__('Only event types available to this employee are shown.'))
                     ->live(),
                 ...$this->eventPeriodFields(),
+                Forms\Components\Placeholder::make('past_date_warning')
+                    ->hiddenLabel()
+                    ->content(new HtmlString('<span style="color: rgb(217 119 6); font-weight: 500;">'
+                        .e(__('⚠️ The event starts on a past date. Make sure this assignment is intended.')).'</span>'))
+                    ->visible(fn (Forms\Get $get): bool => $this->isPastDate($get('starts_at'))),
                 Forms\Components\Textarea::make('note')
                     ->label(__('Note'))
                     ->rows(2),
@@ -659,7 +678,8 @@ class DutyMatrix extends Page implements HasForms, HasActions
             return [
                 Forms\Components\DatePicker::make('starts_at')
                     ->label(__('Start date'))
-                    ->required(),
+                    ->required()
+                    ->live(),
                 Forms\Components\DatePicker::make('ends_at')
                     ->label(__('End date (inclusive)'))
                     ->required()
@@ -671,7 +691,8 @@ class DutyMatrix extends Page implements HasForms, HasActions
             Forms\Components\DateTimePicker::make('starts_at')
                 ->label(__('Start'))
                 ->required()
-                ->seconds(false),
+                ->seconds(false)
+                ->live(),
             Forms\Components\DateTimePicker::make('ends_at')
                 ->label(__('End'))
                 ->required()
@@ -767,6 +788,19 @@ class DutyMatrix extends Page implements HasForms, HasActions
         } else {
             Notification::make()->title(__('Event assigned successfully'))->success()->send();
         }
+
+        $this->notifyIfPast($startsAt);
+    }
+
+    protected function notifyIfPast(Carbon $startsAt): void
+    {
+        if ($this->isPastDay($startsAt)) {
+            Notification::make()
+                ->title(__('The event is on a past date'))
+                ->body(__('It starts on :date, which has already passed.', ['date' => $startsAt->format('d.m.Y')]))
+                ->warning()
+                ->send();
+        }
     }
 
     protected function updateEvent(array $data): void
@@ -809,6 +843,10 @@ class DutyMatrix extends Page implements HasForms, HasActions
             ->title(__('Event updated'))
             ->success()
             ->send();
+
+        if (! $startsAt->eq($oldStart)) {
+            $this->notifyIfPast($startsAt);
+        }
     }
 
     public function deleteEvent(int $eventId): void

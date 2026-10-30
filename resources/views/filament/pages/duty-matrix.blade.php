@@ -1,12 +1,33 @@
 <x-filament-panels::page>
-    {{-- Explicit vertical column separators. Tailwind's border-r utility is not part of
-         Filament's precompiled CSS (the project has no Tailwind build step), so we define
-         the rules here. Colors mirror the horizontal borders in light/dark themes. --}}
+    {{-- Filament's precompiled CSS contains only the utilities Filament itself uses (the project
+         has no Tailwind build step): no border-r and no red/yellow colors. Column separators and
+         the highlight colors are therefore defined here, for light and dark themes. --}}
     <style>
         .dm-vline      { border-right: 1px solid rgb(243 244 246); } /* gray-100 */
         .dark .dm-vline{ border-right-color: rgb(31 41 55); }        /* gray-800 */
         .dm-vline-head      { border-right: 1px solid rgb(229 231 235); } /* gray-200 */
         .dark .dm-vline-head{ border-right-color: rgb(55 65 81); }        /* gray-700 */
+        .dark td.dm-vline   { border-bottom-color: rgb(31 41 55); }       /* dark:border-gray-800 */
+        /* Weekends (Saturday, Sunday). */
+        .dm-weekend-head       { background-color: rgb(254 226 226); color: rgb(220 38 38); }    /* red-100 / red-600 */
+        .dark .dm-weekend-head { background-color: rgb(127 29 29 / .45); color: rgb(248 113 113); }
+        .dm-weekend            { background-color: rgb(254 242 242); }                          /* red-50 */
+        .dark .dm-weekend      { background-color: rgb(127 29 29 / .2); }
+        /* Rest zones on hover; defined after weekends so they win on weekend cells. */
+        .dm-rest-min            { background-color: rgb(254 202 202); }                         /* red-200 */
+        .dark .dm-rest-min      { background-color: rgb(153 27 27 / .55); }
+        .dm-rest-preferred      { background-color: rgb(254 240 138); }                         /* yellow-200 */
+        .dark .dm-rest-preferred{ background-color: rgb(133 77 14 / .45); }
+        /* Staffing deficit in the "Unassigned" row. */
+        .dm-deficit            { background-color: rgb(254 202 202); color: rgb(185 28 28); }
+        .dark .dm-deficit      { background-color: rgb(127 29 29); color: rgb(252 165 165); }
+        /* "+" button of an empty cell. */
+        .dm-add                { color: rgb(209 213 219); }
+        .dm-add:hover          { background-color: rgb(var(--primary-100)); color: rgb(var(--primary-600)); }
+        .dark .dm-add:hover    { background-color: rgb(var(--primary-900) / .3); color: rgb(var(--primary-400)); }
+        /* Past dates: dimmed like inactive employees; the cell background (weekends, rest zones) stays visible. */
+        .dm-past-head       { opacity: .45; }
+        .dm-past > *        { opacity: .5; }
     </style>
 
     <div x-data="{
@@ -104,6 +125,10 @@
                     {{ $type->name }}
                 </span>
             @endforeach
+            <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700">
+                <span class="w-3 h-3 rounded-sm inline-block" style="background-color: rgb(107 114 128); opacity: .4;"></span>
+                {{ __('Past dates') }}
+            </span>
         </div>
 
         {{-- Matrix --}}
@@ -122,7 +147,10 @@
                                 $isWeekend = $day->isWeekend();
                             @endphp
                             <th class="dm-vline-head border-b border-gray-200 dark:border-gray-700 px-1 py-1 text-center
-                                       {{ $showHighlights['weekends'] && $isWeekend ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400' : '' }}">
+                                       {{ $showHighlights['weekends'] && $isWeekend ? 'dm-weekend-head' : '' }}
+                                       {{ $this->isPastDay($day) ? 'dm-past-head' : '' }}"
+                                @if($this->isPastDay($day)) title="{{ __('Past date') }}" @endif
+                            >
                                 {{ $day->format('d') }}<br>
                                 <span class="text-[9px] text-gray-400">{{ $day->translatedFormat('D') }}</span>
                             </th>
@@ -179,10 +207,11 @@
                                     $isWeekend = $day->isWeekend();
                                 @endphp
                                 <td class="dm-vline border-b border-gray-100 dark:border-gray-800 p-0.5 text-center align-middle
-                                           {{ $showHighlights['weekends'] && $isWeekend ? 'bg-red-50/50 dark:bg-red-950/20' : '' }}"
+                                           {{ $showHighlights['weekends'] && $isWeekend ? 'dm-weekend' : '' }}
+                                           {{ $this->isPastDay($day) ? 'dm-past' : '' }}"
                                     :class="{
-                                        'bg-red-100 dark:bg-red-900/40': {{ $showHighlights['rest_zones'] ? 'true' : 'false' }} && inMinZone({{ $employee->id }}, '{{ $dateKey }}'),
-                                        'bg-yellow-100 dark:bg-yellow-900/30': {{ $showHighlights['rest_zones'] ? 'true' : 'false' }} && inPreferredZone({{ $employee->id }}, '{{ $dateKey }}')
+                                        'dm-rest-min': {{ $showHighlights['rest_zones'] ? 'true' : 'false' }} && inMinZone({{ $employee->id }}, '{{ $dateKey }}'),
+                                        'dm-rest-preferred': {{ $showHighlights['rest_zones'] ? 'true' : 'false' }} && inPreferredZone({{ $employee->id }}, '{{ $dateKey }}')
                                     }"
                                 >
                                     @if(count($dayEvents))
@@ -217,7 +246,7 @@
                                     @elseif($employee->is_active)
                                         <button type="button"
                                             wire:click="mountAction('assign', { userId: {{ $employee->id }}, date: '{{ $dateKey }}' })"
-                                            class="w-full h-5 rounded hover:bg-primary-100 dark:hover:bg-primary-900/30 text-gray-300">
+                                            class="dm-add w-full h-5 rounded">
                                             +
                                         </button>
                                     @endif
@@ -233,7 +262,7 @@
                                         @endforeach
                                     </div>
                                     @if($warningCount > 0)
-                                        <div class="text-amber-600">{{ __('⚠️ exceptions: :count', ['count' => $warningCount]) }}</div>
+                                        <div style="color: rgb(217 119 6);">{{ __('⚠️ exceptions: :count', ['count' => $warningCount]) }}</div>
                                     @endif
                                 </td>
                             @endif
@@ -257,7 +286,8 @@
                                 }
                             @endphp
                             <td class="dm-vline px-1 py-1 text-center
-                                {{ $showHighlights['capacity'] && $deficit ? 'bg-red-200 dark:bg-red-900 text-red-700 dark:text-red-300' : '' }}">
+                                {{ $showHighlights['capacity'] && $deficit ? 'dm-deficit' : '' }}
+                                {{ $this->isPastDay($day) ? 'dm-past-head' : '' }}">
                                 {{ $deficit ? '⚠️' : '' }}
                             </td>
                         @endforeach

@@ -278,5 +278,11 @@
     "Rolling period": "Ковзне вікно",
     "Number of consecutive days": "Кількість днів поспіль",
     "The limit holds for every stretch of this many consecutive days.": "Ліміт діє для кожного проміжку з такої кількості днів поспіль.",
-    "any :length consecutive days": "будь-які :length дн. поспіль"
+    "any :length consecutive days": "будь-які :length дн. поспіль",
+    "Past dates": "Минулі дати",
+    "Past date": "Минула дата",
+    "⚠️ The event starts on a past date. Make sure this assignment is intended.": "⚠️ Подія починається в минулому. Переконайтеся, що це призначення справді потрібне.",
+    "The event is on a past date": "Подію призначено на минулу дату",
+    "It starts on :date, which has already passed.": "Вона починається :date, а ця дата вже минула.",
+    "⚠️ The period starts on a past date (:date). Assignments will also be generated for days that have already passed.": "⚠️ Період починається в минулому (:date). Призначення буде згенеровано й на дні, що вже минули."
 }

@@ -118,6 +118,9 @@ the matrix.
   they still have events in the period; they are shown last, struck through
   and marked "Inactive". New events cannot be assigned to them, neither
   manually, by auto-generation, nor by approving a draft.
+- Past dates are dimmed in the matrix. Assigning an event on a past date or
+  auto-generating for a period that starts in the past is allowed but shows a
+  warning; auto-generation of the current month starts from today by default.
 - Period reports for workload distribution, staffing deficits, and rest
   warnings.
 - Excel export with event colors and summary columns.

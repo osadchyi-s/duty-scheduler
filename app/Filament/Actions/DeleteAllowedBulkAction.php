@@ -14,6 +14,18 @@ use Illuminate\Database\Eloquent\Model;
  */
 class DeleteAllowedBulkAction extends DeleteBulkAction
 {
+    protected ?string $skippedReason = null;
+
+    /**
+     * Notification text for skipped records; ":count" is replaced with their number.
+     */
+    public function skippedReason(string $reason): static
+    {
+        $this->skippedReason = $reason;
+
+        return $this;
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -35,7 +47,8 @@ class DeleteAllowedBulkAction extends DeleteBulkAction
             if ($skipped > 0) {
                 Notification::make()
                     ->title(__('Some records were not deleted'))
-                    ->body(__('Records with events cannot be deleted: :count. Deactivate them instead.', ['count' => $skipped]))
+                    ->body(str_replace(':count', (string) $skipped, $this->skippedReason
+                        ?? __('Records with events cannot be deleted: :count. Deactivate them instead.')))
                     ->warning()
                     ->send();
 

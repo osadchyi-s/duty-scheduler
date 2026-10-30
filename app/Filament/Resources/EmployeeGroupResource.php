@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Actions\DeleteAllowedBulkAction;
 use App\Filament\Resources\EmployeeGroupResource\Pages;
 use App\Models\EmployeeGroup;
 use App\Models\User;
@@ -82,7 +83,8 @@ class EmployeeGroupResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    DeleteAllowedBulkAction::make()
+                        ->skippedReason(__('Groups used by duty limits cannot be deleted: :count.')),
                 ]),
             ]);
     }

@@ -271,5 +271,8 @@
     "Employee :name is inactive and cannot be assigned events.": "Employee :name is inactive and cannot be assigned events.",
     "Inactive employee: existing events are shown, new ones cannot be assigned.": "Inactive employee: existing events are shown, new ones cannot be assigned.",
     "Inactive": "Inactive",
-    "inactive": "inactive"
+    "inactive": "inactive",
+    "If no groups are selected, the limit applies to all employees.": "If no groups are selected, the limit applies to all employees.",
+    "All employees": "All employees",
+    "Groups used by duty limits cannot be deleted: :count.": "Groups used by duty limits cannot be deleted: :count."
 }

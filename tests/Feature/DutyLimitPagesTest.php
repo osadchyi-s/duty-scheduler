@@ -119,13 +119,32 @@ it('creates a duty limit for groups and a period', function () {
         ->and($limit->groups->pluck('id')->all())->toBe([$group->id]);
 });
 
-it('requires at least one group for a duty limit', function () {
+it('creates a duty limit without groups for all employees', function () {
     $this->actingAs($this->manager);
 
     Livewire::test(CreateDutyLimit::class)
-        ->fillForm(['name' => 'Без груп', 'period_id' => Period::first()->id, 'max_days' => 2])
+        ->fillForm(['name' => 'Для всіх', 'period_id' => Period::first()->id, 'max_days' => 2])
         ->call('create')
-        ->assertHasFormErrors(['groups' => 'required']);
+        ->assertHasNoFormErrors();
+
+    expect(DutyLimit::sole()->groups)->toBeEmpty();
+});
+
+it('does not allow deleting a group used by a duty limit', function () {
+    $this->actingAs($this->manager);
+    $used = EmployeeGroup::create(['name' => 'Чергові']);
+    $unused = EmployeeGroup::create(['name' => 'Резерв']);
+    $limit = DutyLimit::create(['name' => 'Ліміт', 'period_id' => Period::first()->id, 'max_days' => 2]);
+    $limit->groups()->attach($used->id);
+
+    Livewire::test(\App\Filament\Resources\EmployeeGroupResource\Pages\ListEmployeeGroups::class)
+        ->assertTableActionHidden(DeleteAction::class, $used)
+        ->assertTableActionVisible(DeleteAction::class, $unused)
+        ->callTableBulkAction('delete', [$used, $unused]);
+
+    expect(EmployeeGroup::find($used->id))->not->toBeNull()
+        ->and(EmployeeGroup::find($unused->id))->toBeNull()
+        ->and($limit->fresh()->groups)->toHaveCount(1);
 });
 
 it('renders admin pages at full content width', function () {

@@ -90,7 +90,7 @@ class DutyLimitResource extends Resource
                         ->multiple()
                         ->preload()
                         ->searchable()
-                        ->required()
+                        ->helperText(__('If no groups are selected, the limit applies to all employees.'))
                         ->createOptionForm(EmployeeGroupResource::formSchema()),
                     Forms\Components\Select::make('eventTypes')
                         ->label(__('Event types'))
@@ -117,7 +117,10 @@ class DutyLimitResource extends Resource
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => $state === DutyLimit::SEVERITY_FORBIDDEN ? __('Forbid') : __('Warn'))
                     ->color(fn (string $state): string => $state === DutyLimit::SEVERITY_FORBIDDEN ? 'danger' : 'warning'),
-                Tables\Columns\TextColumn::make('groups.name')->label(__('Employee groups'))->badge(),
+                Tables\Columns\TextColumn::make('groups.name')
+                    ->label(__('Employee groups'))
+                    ->badge()
+                    ->placeholder(__('All employees')),
                 Tables\Columns\TextColumn::make('eventTypes.name')
                     ->label(__('Event types'))
                     ->badge()

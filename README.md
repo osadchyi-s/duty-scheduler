@@ -205,7 +205,8 @@ They are built from three entities, each managed on its own page by
 administrators and managers:
 
 - **Employee groups** (**People and access → Employee groups**) — named sets
-  of employees. An employee can belong to several groups.
+  of employees. An employee can belong to several groups. A group used by a
+  duty limit cannot be deleted.
 - **Periods** (**Scheduling rules → Periods**) — the built-in *calendar week*
   (Monday to Sunday) and *calendar month* are always available and read-only.
   You can add a *fixed period* (a date range) or a *recurring period* (for
@@ -214,10 +215,12 @@ administrators and managers:
 - **Duty limits** (**Scheduling rules → Duty limits**) — a period, employee
   groups, the maximum number of duty days per employee, and what happens when
   it is exceeded: forbid the assignment or allow it with a warning. If no
-  event types are selected, all working event types are counted. Groups and
+  groups are selected, the limit applies to all employees; if no event types
+  are selected, all working event types are counted. Groups and
   periods can also be created directly from the limit form.
 
-The limit applies to each employee of the selected groups separately, in each
+The limit applies to each employee of the selected groups (or to every
+employee) separately, in each
 window of the period. Every applicable limit is checked, so the strictest one
 wins. An event counts as many days as it lasts, starting from its start day; a
 multi-day event is split between windows. In hours mode, a 24-hour shift

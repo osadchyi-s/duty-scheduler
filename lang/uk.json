@@ -271,5 +271,8 @@
     "Employee :name is inactive and cannot be assigned events.": "Співробітник :name неактивний, йому не можна призначати події.",
     "Inactive employee: existing events are shown, new ones cannot be assigned.": "Неактивний співробітник: наявні події показано, нові призначати не можна.",
     "Inactive": "Неактивний",
-    "inactive": "неактивний"
+    "inactive": "неактивний",
+    "If no groups are selected, the limit applies to all employees.": "Якщо групи не вибрано, ліміт діє на всіх співробітників.",
+    "All employees": "Усі співробітники",
+    "Groups used by duty limits cannot be deleted: :count.": "Групи, які використовують ліміти чергувань, не можна видалити: :count."
 }

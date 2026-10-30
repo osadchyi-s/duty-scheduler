@@ -97,6 +97,13 @@ it('counts every day of a multi-day duty and splits it between periods', functio
         ->and(validateDay($this, '2026-11-11')->isAllowed)->toBeTrue();
 });
 
+it('applies a limit without groups to every employee', function () {
+    makeLimit($this->week, 1);
+    dutyOn($this->user, $this->dutyType, '2026-11-02');
+
+    expect(validateDay($this, '2026-11-04')->isAllowed)->toBeFalse();
+});
+
 it('only applies to members of the selected groups', function () {
     $otherGroup = EmployeeGroup::create(['name' => 'Інші']);
     makeLimit($this->week, 0, groups: [$otherGroup->id]);

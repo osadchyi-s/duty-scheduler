@@ -22,9 +22,13 @@ class EmployeeGroupPolicy
         return $user->hasRole(['Admin', 'Manager']);
     }
 
+    /**
+     * A group used by a duty limit cannot be deleted: a limit left without
+     * groups would silently start to apply to all employees.
+     */
     public function delete(User $user, EmployeeGroup $employeeGroup): bool
     {
-        return $user->hasRole(['Admin', 'Manager']);
+        return $user->hasRole(['Admin', 'Manager']) && ! $employeeGroup->dutyLimits()->exists();
     }
 
     public function deleteAny(User $user): bool

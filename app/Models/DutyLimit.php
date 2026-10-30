@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * Maximum number of duty days per employee of the selected groups within each
- * window of a period. Without selected event types, all working event types count.
+ * window of a period. Without selected groups the limit applies to all employees;
+ * without selected event types, all working event types count.
  */
 class DutyLimit extends Model
 {
@@ -57,7 +58,8 @@ class DutyLimit extends Model
      */
     public function appliesToUser(int $userId): bool
     {
-        return $this->groups->contains(fn (EmployeeGroup $group): bool => $group->users->contains('id', $userId));
+        return $this->groups->isEmpty()
+            || $this->groups->contains(fn (EmployeeGroup $group): bool => $group->users->contains('id', $userId));
     }
 
     public function appliesToEventType(EventType $eventType): bool

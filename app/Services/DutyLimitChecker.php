@@ -12,7 +12,8 @@ use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * Checks duty limits: an employee of a limit's groups may have at most
+ * Checks duty limits: an employee of a limit's groups (every employee when the
+ * limit has no groups) may have at most
  * max_days counted duty days (see UserEvent::countedDaysFor) of the limit's
  * event types within each window of the limit's period. All applicable
  * limits are checked, so effectively the strictest one wins.

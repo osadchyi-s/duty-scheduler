@@ -284,5 +284,7 @@
     "⚠️ The event starts on a past date. Make sure this assignment is intended.": "⚠️ The event starts on a past date. Make sure this assignment is intended.",
     "The event is on a past date": "The event is on a past date",
     "It starts on :date, which has already passed.": "It starts on :date, which has already passed.",
-    "⚠️ The period starts on a past date (:date). Assignments will also be generated for days that have already passed.": "⚠️ The period starts on a past date (:date). Assignments will also be generated for days that have already passed."
+    "⚠️ The period starts on a past date (:date). Assignments will also be generated for days that have already passed.": "⚠️ The period starts on a past date (:date). Assignments will also be generated for days that have already passed.",
+    "Not enough people:": "Not enough people:",
+    ":type — :assigned of :required": ":type — :assigned of :required"
 }

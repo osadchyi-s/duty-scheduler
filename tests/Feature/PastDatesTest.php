@@ -34,9 +34,9 @@ it('dims the days before today in the matrix', function () {
     $html = Livewire::test(DutyMatrix::class)->set('month', '2026-09')->html();
 
     // Days 1–14 are past: their header and the "unassigned" cell are dimmed; today is not.
-    expect(substr_count($html, 'title="Минула дата"'))->toBe(14)
+    expect(substr_count($html, 'title="Минула дата'))->toBe(14)
         ->and(substr_count($html, 'dm-past-head'))->toBe(28 + 1) // headers + unassigned row + the CSS rule
-        ->and(Livewire::test(DutyMatrix::class)->set('month', '2026-10')->html())->not->toContain('title="Минула дата"');
+        ->and(Livewire::test(DutyMatrix::class)->set('month', '2026-10')->html())->not->toContain('title="Минула дата');
 });
 
 it('warns when an event is assigned on a past date', function () {

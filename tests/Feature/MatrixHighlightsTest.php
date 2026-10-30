@@ -9,7 +9,8 @@ use Spatie\Permission\Models\Role;
 
 function countClass(string $html, string $class): int
 {
-    return preg_match_all('/class="[^"]*\\b'.preg_quote($class, '/').'\\b[^"]*"/', $html);
+    // Exact class name: "dm-deficit" must not match "dm-deficit-head".
+    return preg_match_all('/class="[^"]*(?<![\\w-])'.preg_quote($class, '/').'(?![\\w-])[^"]*"/', $html);
 }
 
 beforeEach(function () {
@@ -54,4 +55,19 @@ it('uses only color utilities that exist in the precompiled Filament CSS', funct
         ->all();
 
     expect($missing)->toBe([]);
+});
+
+it('marks understaffed days in the header with the missing event types in the tooltip', function () {
+    EventType::create(['name' => 'Чергування', 'code' => 'duty', 'color_code' => '#3B82F6', 'min_capacity' => 2, 'is_active' => true]);
+    EventType::create(['name' => 'Без мінімуму', 'code' => 'free', 'color_code' => '#000000', 'min_capacity' => 0, 'is_active' => true]);
+
+    $page = Livewire::test(DutyMatrix::class)->set('month', '2026-11');
+    $html = $page->html();
+
+    expect(countClass($html, 'dm-deficit-head'))->toBe(30)
+        ->and($html)->toContain("Не вистачає людей:\nЧергування — 0 з 2")
+        ->and($html)->not->toContain('Без мінімуму — ');
+
+    $page->set('showHighlights.capacity', false);
+    expect(countClass($page->html(), 'dm-deficit-head'))->toBe(0);
 });

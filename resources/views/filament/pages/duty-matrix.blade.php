@@ -8,11 +8,11 @@
         .dm-vline-head      { border-right: 1px solid rgb(229 231 235); } /* gray-200 */
         .dark .dm-vline-head{ border-right-color: rgb(55 65 81); }        /* gray-700 */
         .dark td.dm-vline   { border-bottom-color: rgb(31 41 55); }       /* dark:border-gray-800 */
-        /* Weekends (Saturday, Sunday). */
-        .dm-weekend-head       { background-color: rgb(254 226 226); color: rgb(220 38 38); }    /* red-100 / red-600 */
-        .dark .dm-weekend-head { background-color: rgb(127 29 29 / .45); color: rgb(248 113 113); }
-        .dm-weekend            { background-color: rgb(254 242 242); }                          /* red-50 */
-        .dark .dm-weekend      { background-color: rgb(127 29 29 / .2); }
+        /* Weekends (Saturday, Sunday): a neutral, lighter tone than weekdays and a lighter date. */
+        .dm-weekend-head       { background-color: rgb(249 250 251); color: rgb(156 163 175); } /* gray-50 / gray-400 */
+        .dark .dm-weekend-head { background-color: rgb(255 255 255 / .04); color: rgb(107 114 128); }
+        .dm-weekend            { background-color: rgb(249 250 251); }                          /* gray-50 */
+        .dark .dm-weekend      { background-color: rgb(255 255 255 / .03); }
         /* Rest zones on hover; defined after weekends so they win on weekend cells. */
         .dm-rest-min            { background-color: rgb(254 202 202); }                         /* red-200 */
         .dark .dm-rest-min      { background-color: rgb(153 27 27 / .55); }
@@ -21,6 +21,11 @@
         /* Staffing deficit in the "Unassigned" row. */
         .dm-deficit            { background-color: rgb(254 202 202); color: rgb(185 28 28); }
         .dark .dm-deficit      { background-color: rgb(127 29 29); color: rgb(252 165 165); }
+        /* Header cell of an understaffed day (visible without scrolling to the bottom row);
+           defined after weekends so it wins on weekend days. */
+        .dm-deficit-head       { background-color: rgb(220 38 38); color: #fff; font-weight: 700; } /* red-600 */
+        .dm-deficit-head span  { color: rgb(254 226 226); }
+        .dark .dm-deficit-head { background-color: rgb(185 28 28); }
         /* "+" button of an empty cell. */
         .dm-add                { color: rgb(209 213 219); }
         .dm-add:hover          { background-color: rgb(var(--primary-100)); color: rgb(var(--primary-600)); }
@@ -145,11 +150,14 @@
                         @foreach($this->days as $day)
                             @php
                                 $isWeekend = $day->isWeekend();
+                                $deficitTooltip = $showHighlights['capacity'] ? $this->staffingDeficitTooltip($day) : '';
+                                $headTooltip = trim(($this->isPastDay($day) ? __('Past date') : '')."\n".$deficitTooltip);
                             @endphp
                             <th class="dm-vline-head border-b border-gray-200 dark:border-gray-700 px-1 py-1 text-center
                                        {{ $showHighlights['weekends'] && $isWeekend ? 'dm-weekend-head' : '' }}
+                                       {{ $deficitTooltip !== '' ? 'dm-deficit-head' : '' }}
                                        {{ $this->isPastDay($day) ? 'dm-past-head' : '' }}"
-                                @if($this->isPastDay($day)) title="{{ __('Past date') }}" @endif
+                                @if($headTooltip !== '') title="{{ $headTooltip }}" @endif
                             >
                                 {{ $day->format('d') }}<br>
                                 <span class="text-[9px] text-gray-400">{{ $day->translatedFormat('D') }}</span>
@@ -276,18 +284,13 @@
                         </td>
                         @foreach($this->days as $day)
                             @php
-                                $dateKey = $day->format('Y-m-d');
-                                $deficit = false;
-                                foreach ($this->eventTypes as $type) {
-                                    if ($this->isUnderStaffed($day, $type)) {
-                                        $deficit = true;
-                                        break;
-                                    }
-                                }
+                                $deficit = $this->staffingDeficits($day) !== [];
                             @endphp
                             <td class="dm-vline px-1 py-1 text-center
                                 {{ $showHighlights['capacity'] && $deficit ? 'dm-deficit' : '' }}
-                                {{ $this->isPastDay($day) ? 'dm-past-head' : '' }}">
+                                {{ $this->isPastDay($day) ? 'dm-past-head' : '' }}"
+                                @if($deficit) title="{{ $this->staffingDeficitTooltip($day) }}" @endif
+                            >
                                 {{ $deficit ? '⚠️' : '' }}
                             </td>
                         @endforeach

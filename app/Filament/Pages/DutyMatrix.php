@@ -258,6 +258,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
     {
         $this->draftId = $draftId;
         $this->limitViolations = null;
+        $this->staffingDeficits = null;
     }
 
     public function createDraft(ScheduleDraftService $drafts): void
@@ -550,12 +551,42 @@ class DutyMatrix extends Page implements HasForms, HasActions
         return $engine->monthlyCoverage($start, $end, $this->draft);
     }
 
-    public function isUnderStaffed(Carbon $date, EventType $eventType): bool
-    {
-        $coverage = $this->coverage;
-        $assigned = $coverage[$date->format('Y-m-d')][$eventType->id] ?? 0;
+    /** @var array<string, array<int, array{type: string, assigned: int, required: int}>>|null Per request. */
+    protected ?array $staffingDeficits = null;
 
-        return $eventType->min_capacity > 0 && $assigned < $eventType->min_capacity;
+    /**
+     * Event types with fewer assigned people than min_capacity on the day.
+     *
+     * @return array<int, array{type: string, assigned: int, required: int}>
+     */
+    public function staffingDeficits(Carbon $day): array
+    {
+        if ($this->staffingDeficits === null) {
+            $coverage = $this->coverage;
+            $this->staffingDeficits = [];
+
+            foreach ($this->days as $date) {
+                $dateKey = $date->format('Y-m-d');
+                foreach ($this->eventTypes as $type) {
+                    $assigned = $coverage[$dateKey][$type->id] ?? 0;
+                    if ($type->min_capacity > 0 && $assigned < $type->min_capacity) {
+                        $this->staffingDeficits[$dateKey][] = ['type' => $type->name, 'assigned' => $assigned, 'required' => $type->min_capacity];
+                    }
+                }
+            }
+        }
+
+        return $this->staffingDeficits[$day->format('Y-m-d')] ?? [];
+    }
+
+    /**
+     * Tooltip listing the understaffed event types of the day, one per line.
+     */
+    public function staffingDeficitTooltip(Carbon $day): string
+    {
+        $lines = array_map(fn (array $deficit): string => __(':type — :assigned of :required', $deficit), $this->staffingDeficits($day));
+
+        return $lines === [] ? '' : __('Not enough people:')."\n".implode("\n", $lines);
     }
 
     /**
@@ -907,5 +938,6 @@ class DutyMatrix extends Page implements HasForms, HasActions
     {
         MatrixCache::forgetRange($startsAt, $endsAt, $this->draft?->id);
         $this->limitViolations = null;
+        $this->staffingDeficits = null;
     }
 }

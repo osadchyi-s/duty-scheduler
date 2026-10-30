@@ -12,7 +12,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton(ConstraintsEngine::class);
+        // Scoped, not singleton: the engine caches duty limits, and scoped instances are
+        // reset between requests and queue jobs, so long-running workers see limit changes.
+        $this->app->scoped(ConstraintsEngine::class);
     }
 
     public function boot(): void

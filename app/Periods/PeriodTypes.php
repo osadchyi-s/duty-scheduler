@@ -17,11 +17,14 @@ final class PeriodTypes
 
     public const RECURRING = 'recurring';
 
+    public const ROLLING = 'rolling';
+
     private const TYPES = [
         self::CALENDAR_WEEK => CalendarWeekPeriod::class,
         self::CALENDAR_MONTH => CalendarMonthPeriod::class,
         self::FIXED => FixedPeriod::class,
         self::RECURRING => RecurringPeriod::class,
+        self::ROLLING => RollingPeriod::class,
     ];
 
     public static function get(string $key): PeriodType

@@ -42,5 +42,14 @@ it('repeats a recurring period in both directions from the anchor', function () 
 });
 
 it('only offers configurable period types for new periods', function () {
-    expect(array_keys(PeriodTypes::creatableOptions()))->toBe([PeriodTypes::FIXED, PeriodTypes::RECURRING]);
+    expect(array_keys(PeriodTypes::creatableOptions()))->toBe([PeriodTypes::FIXED, PeriodTypes::RECURRING, PeriodTypes::ROLLING]);
+});
+
+it('puts a day into every rolling window that contains it', function () {
+    expect(windowKeys(PeriodTypes::ROLLING, ['length_days' => 3], '2026-04-29'))->toBe([
+        '27.04.2026–29.04.2026',
+        '28.04.2026–30.04.2026',
+        '29.04.2026–01.05.2026',
+    ])
+        ->and(windowKeys(PeriodTypes::ROLLING, ['length_days' => 0], '2026-04-29'))->toBe([]);
 });

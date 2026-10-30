@@ -180,3 +180,37 @@ it('stops auto-generation from exceeding a hard limit', function () {
     expect($result->createdCount())->toBe(2)
         ->and($result->deficitCount())->toBe(5);
 });
+
+it('applies a rolling period to any consecutive days, unlike fixed recurring weeks', function () {
+    // Weeks from Wednesday 01.04: 22–28.04 and 29.04–05.05 are separate windows.
+    $recurring = Period::create(['name' => 'Тиждень від 01.04', 'type' => PeriodTypes::RECURRING,
+        'params' => ['anchor_date' => '2026-04-01', 'length_days' => '7', 'repeat_every_days' => '7']]);
+    $rolling = Period::create(['name' => 'Будь-які 7 днів', 'type' => PeriodTypes::ROLLING, 'params' => ['length_days' => '7']]);
+    dutyOn($this->user, $this->dutyType, '2026-04-24');
+    dutyOn($this->user, $this->dutyType, '2026-04-26');
+
+    $recurringLimit = makeLimit($recurring, 2);
+    expect(validateDay($this, '2026-04-29')->isAllowed)->toBeTrue();
+
+    $recurringLimit->delete();
+    makeLimit($rolling, 2);
+    // A new request (or queue job) gets a fresh engine that loads the current limits.
+    app()->forgetScopedInstances();
+    $result = validateDay($this, '2026-04-29');
+
+    expect($result->isAllowed)->toBeFalse()
+        ->and($result->reason)->toContain('3 з 2')
+        // A duty a week later fits again: 26.04 has left the 7-day window.
+        ->and(validateDay($this, '2026-05-03')->isAllowed)->toBeTrue();
+});
+
+it('reports a rolling limit once per event although several windows are exceeded', function () {
+    $rolling = Period::create(['name' => 'Будь-які 7 днів', 'type' => PeriodTypes::ROLLING, 'params' => ['length_days' => 7]]);
+    $events = collect(['2026-04-24', '2026-04-26', '2026-04-28'])->map(fn (string $day) => dutyOn($this->user, $this->dutyType, $day));
+    makeLimit($rolling, 2);
+
+    $violations = app(DutyLimitChecker::class)->violations(UserEvent::with('eventType')->get());
+
+    expect(array_keys($violations))->toEqualCanonicalizing($events->pluck('id')->all())
+        ->and(collect($violations)->every(fn (array $reasons): bool => count($reasons) === 1))->toBeTrue();
+});

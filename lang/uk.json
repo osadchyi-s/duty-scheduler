@@ -274,5 +274,9 @@
     "inactive": "неактивний",
     "If no groups are selected, the limit applies to all employees.": "Якщо групи не вибрано, ліміт діє на всіх співробітників.",
     "All employees": "Усі співробітники",
-    "Groups used by duty limits cannot be deleted: :count.": "Групи, які використовують ліміти чергувань, не можна видалити: :count."
+    "Groups used by duty limits cannot be deleted: :count.": "Групи, які використовують ліміти чергувань, не можна видалити: :count.",
+    "Rolling period": "Ковзне вікно",
+    "Number of consecutive days": "Кількість днів поспіль",
+    "The limit holds for every stretch of this many consecutive days.": "Ліміт діє для кожного проміжку з такої кількості днів поспіль.",
+    "any :length consecutive days": "будь-які :length дн. поспіль"
 }

@@ -274,5 +274,9 @@
     "inactive": "inactive",
     "If no groups are selected, the limit applies to all employees.": "If no groups are selected, the limit applies to all employees.",
     "All employees": "All employees",
-    "Groups used by duty limits cannot be deleted: :count.": "Groups used by duty limits cannot be deleted: :count."
+    "Groups used by duty limits cannot be deleted: :count.": "Groups used by duty limits cannot be deleted: :count.",
+    "Rolling period": "Rolling period",
+    "Number of consecutive days": "Number of consecutive days",
+    "The limit holds for every stretch of this many consecutive days.": "The limit holds for every stretch of this many consecutive days.",
+    "any :length consecutive days": "any :length consecutive days"
 }

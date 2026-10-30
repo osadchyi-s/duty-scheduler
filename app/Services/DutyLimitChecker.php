@@ -125,13 +125,14 @@ class DutyLimitChecker
 
                     $reason = $this->reason($limit, $total, $window);
                     foreach ($this->matchingEvents($limit, $userEvents, $window) as $event) {
-                        $violations[$event->id][] = $reason;
+                        // One reason per limit: with a rolling period an event is in several exceeded windows.
+                        $violations[$event->id][$limitKey] ??= $reason;
                     }
                 }
             }
         }
 
-        return $violations;
+        return array_map('array_values', $violations);
     }
 
     /**

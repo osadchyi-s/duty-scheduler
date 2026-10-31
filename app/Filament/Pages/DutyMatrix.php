@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\AppSetting;
 use App\Exports\ScheduleExport;
+use App\Filament\Resources\ActivityLogResource;
 use App\Models\EventType;
 use App\Models\ScheduleDraft;
 use App\Models\User;
@@ -13,6 +14,7 @@ use App\Services\ConstraintCheckResult;
 use App\Services\ConstraintsEngine;
 use App\Services\DutyLimitChecker;
 use App\Services\ScheduleDraftService;
+use App\Support\AuditLog;
 use App\Support\MatrixCache;
 use App\Support\TimeUnit;
 use Carbon\Carbon;
@@ -165,7 +167,9 @@ class DutyMatrix extends Page implements HasForms, HasActions
                     ->fillForm(fn (): array => ['name' => $this->draft?->name])
                     ->action(function (array $data): void {
                         $this->authorizeDraft('update');
+                        $oldName = $this->draft->name;
                         $this->draft->update(['name' => $data['name']]);
+                        AuditLog::record('draft_renamed', $this->draft, ['old' => $oldName, 'new' => $data['name']]);
                         Notification::make()->title(__('Draft renamed'))->success()->send();
                     }),
                 Action::make('duplicate_draft')
@@ -186,7 +190,13 @@ class DutyMatrix extends Page implements HasForms, HasActions
                     ->modalDescription(__('The draft and all its events are deleted. The approved schedule does not change.'))
                     ->action(function (): void {
                         $this->authorizeDraft('delete');
-                        $this->draft->delete();
+                        $draft = $this->draft;
+                        AuditLog::record('draft_deleted', $draft, [
+                            'name' => $draft->name,
+                            'month' => $draft->month->format('Y-m'),
+                            'events' => $draft->events()->count(),
+                        ]);
+                        $draft->delete();
                         $this->selectDraft(null);
                         Notification::make()->title(__('Draft deleted'))->success()->send();
                     }),
@@ -681,6 +691,17 @@ class DutyMatrix extends Page implements HasForms, HasActions
                     ->label(__('Note'))
                     ->rows(2),
                 Forms\Components\Actions::make([
+                    // Only events of the approved schedule are logged one by one.
+                    Forms\Components\Actions\Action::make('event_history')
+                        ->label(__('History'))
+                        ->icon('heroicon-o-clock')
+                        ->color('gray')
+                        ->url(fn (Forms\Get $get): ?string => filled($get('event_id'))
+                            ? ActivityLogResource::historyUrlFor((new UserEvent)->getMorphClass(), (int) $get('event_id'))
+                            : null, shouldOpenInNewTab: true)
+                        ->visible(fn (Forms\Get $get): bool => filled($get('event_id'))
+                            && $this->draft === null
+                            && ActivityLogResource::canViewAny()),
                     Forms\Components\Actions\Action::make('delete_event')
                         ->label(__('Delete'))
                         ->color('danger')
@@ -943,6 +964,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
         if ($draft) {
             $this->authorizeDraft('update');
             $deleted = $draft->events()->delete();
+            AuditLog::record('draft_cleared', $draft, ['name' => $draft->name, 'month' => $this->month, 'deleted' => $deleted]);
         } else {
             abort_unless(auth()->user()?->hasRole('Admin'), 403);
             $deleted = UserEvent::query()
@@ -951,6 +973,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
                 ->where('starts_at', '>=', $start)
                 ->where('starts_at', '<=', $end)
                 ->delete();
+            AuditLog::record('month_cleared', null, ['month' => $this->month, 'deleted' => $deleted]);
         }
 
         $this->flushMatrixCachesForRange($start, $end);

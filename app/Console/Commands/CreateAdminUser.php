@@ -6,7 +6,7 @@ use App\Models\User;
 use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Validator;
-use Spatie\Permission\Models\Role;
+use App\Models\Role;
 
 /**
  * Creates the first administrator of a fresh installation (production/staging),

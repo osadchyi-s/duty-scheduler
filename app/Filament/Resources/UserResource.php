@@ -14,7 +14,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Spatie\Permission\Models\Role;
+use App\Models\Role;
 
 class UserResource extends Resource
 {

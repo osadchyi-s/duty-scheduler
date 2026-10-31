@@ -10,7 +10,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
 use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
+use App\Models\Role;
 
 /**
  * Permission matrix and role management, available ONLY to Admin (spec 2.2).

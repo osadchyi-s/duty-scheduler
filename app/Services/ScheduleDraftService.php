@@ -6,6 +6,7 @@ use App\Models\EventType;
 use App\Models\ScheduleDraft;
 use App\Models\User;
 use App\Models\UserEvent;
+use App\Support\AuditLog;
 use App\Support\MatrixCache;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -51,6 +52,12 @@ class ScheduleDraftService
 
             MatrixCache::forgetRange($from, $from, $draft->id);
 
+            AuditLog::record('draft_created', $draft, [
+                'name' => $draft->name,
+                'month' => $draft->month->format('Y-m'),
+                'copied_events' => $approvedEvents->count(),
+            ]);
+
             return $draft;
         });
     }
@@ -69,9 +76,18 @@ class ScheduleDraftService
                 'snapshot_at' => $draft->snapshot_at,
             ]);
 
-            foreach ($draft->events()->get() as $event) {
+            $events = $draft->events()->get();
+            foreach ($events as $event) {
                 $this->copyEvent($event, $copy, $event->source_event_id);
             }
+
+            AuditLog::record('draft_duplicated', $copy, [
+                'name' => $copy->name,
+                'month' => $copy->month->format('Y-m'),
+                'source_draft_id' => $draft->id,
+                'source_draft_name' => $draft->name,
+                'events' => $events->count(),
+            ]);
 
             return $copy;
         });
@@ -136,57 +152,74 @@ class ScheduleDraftService
      */
     public function approve(ScheduleDraft $draft, array $keepEventIds, ?User $user): void
     {
-        DB::transaction(function () use ($draft, $keepEventIds, $user): void {
-            // Serializes concurrent approvals of drafts of the same month.
-            ScheduleDraft::query()->forMonth($draft->month)->lockForUpdate()->get();
+        $summary = [];
 
-            $plan = $this->approvalPlan($draft);
-            $keep = collect($keepEventIds)->map(fn ($id): int => (int) $id)->flip();
+        // One summary entry is logged after the approval instead of an entry per replaced event.
+        // A regular closure (not fn) so that $summary is shared by reference.
+        AuditLog::withoutModelLogs(function () use ($draft, $keepEventIds, $user, &$summary): void {
+            DB::transaction(function () use ($draft, $keepEventIds, $user, &$summary): void {
+                // Serializes concurrent approvals of drafts of the same month.
+                ScheduleDraft::query()->forMonth($draft->month)->lockForUpdate()->get();
 
-            UserEvent::query()
-                ->whereKey($plan['remove']->reject(fn (UserEvent $event): bool => $keep->has($event->id))->pluck('id'))
-                ->delete();
+                $plan = $this->approvalPlan($draft);
+                $keep = collect($keepEventIds)->map(fn ($id): int => (int) $id)->flip();
 
-            // Insert everything first, so each event is validated against the complete result.
-            $created = $plan['add']->map(fn (UserEvent $draftEvent): array => [$draftEvent, UserEvent::create([
-                'user_id' => $draftEvent->user_id,
-                'event_type_id' => $draftEvent->event_type_id,
-                'starts_at' => $draftEvent->starts_at,
-                'ends_at' => $draftEvent->ends_at,
-                'status' => 'approved',
-                'note' => $draftEvent->note,
-                'created_by' => $user?->id ?? $draftEvent->created_by,
-            ])]);
+                $removedIds = $plan['remove']->reject(fn (UserEvent $event): bool => $keep->has($event->id))->pluck('id');
+                UserEvent::query()->whereKey($removedIds)->delete();
 
-            $problems = [];
-            foreach ($created as [$draftEvent, $event]) {
-                $result = $this->engine->validate(
-                    $draftEvent->user, $draftEvent->eventType, $event->starts_at, $event->ends_at, $event->id
-                );
+                // Insert everything first, so each event is validated against the complete result.
+                $created = $plan['add']->map(fn (UserEvent $draftEvent): array => [$draftEvent, UserEvent::create([
+                    'user_id' => $draftEvent->user_id,
+                    'event_type_id' => $draftEvent->event_type_id,
+                    'starts_at' => $draftEvent->starts_at,
+                    'ends_at' => $draftEvent->ends_at,
+                    'status' => 'approved',
+                    'note' => $draftEvent->note,
+                    'created_by' => $user?->id ?? $draftEvent->created_by,
+                ])]);
 
-                if (! $result->isAllowed) {
-                    $problems[] = $draftEvent->starts_at->format('d.m').' '.$draftEvent->user->name.': '.$result->reason;
+                $problems = [];
+                foreach ($created as [$draftEvent, $event]) {
+                    $result = $this->engine->validate(
+                        $draftEvent->user, $draftEvent->eventType, $event->starts_at, $event->ends_at, $event->id
+                    );
 
-                    continue;
+                    if (! $result->isAllowed) {
+                        $problems[] = $draftEvent->starts_at->format('d.m').' '.$draftEvent->user->name.': '.$result->reason;
+
+                        continue;
+                    }
+
+                    $event->update([
+                        'has_warning' => $result->status === ConstraintCheckResult::STATUS_WARNING,
+                        'warning_reason' => $result->reason,
+                    ]);
                 }
 
-                $event->update([
-                    'has_warning' => $result->status === ConstraintCheckResult::STATUS_WARNING,
-                    'warning_reason' => $result->reason,
-                ]);
-            }
+                if ($problems !== []) {
+                    throw ValidationException::withMessages(['draft' => $problems]);
+                }
 
-            if ($problems !== []) {
-                throw ValidationException::withMessages(['draft' => $problems]);
-            }
+                $draft->update(['approved_at' => now(), 'approved_by' => $user?->id, 'stale_at' => null]);
 
-            $draft->update(['approved_at' => now(), 'approved_by' => $user?->id, 'stale_at' => null]);
+                $staleDrafts = ScheduleDraft::query()
+                    ->forMonth($draft->month)
+                    ->whereKeyNot($draft->id)
+                    ->update(['stale_at' => now()]);
 
-            ScheduleDraft::query()
-                ->forMonth($draft->month)
-                ->whereKeyNot($draft->id)
-                ->update(['stale_at' => now()]);
+                $summary = [
+                    'name' => $draft->name,
+                    'month' => $draft->month->format('Y-m'),
+                    'added' => $plan['add']->count(),
+                    'removed' => $removedIds->count(),
+                    'kept' => $plan['remove']->count() - $removedIds->count(),
+                    'unchanged' => $plan['unchanged']->count(),
+                    'stale_drafts' => $staleDrafts,
+                ];
+            });
         });
+
+        AuditLog::record('draft_approved', $draft, $summary);
 
         [$from, $to] = $draft->window();
         // Events may cross the month boundary, so neighbouring months are refreshed too.

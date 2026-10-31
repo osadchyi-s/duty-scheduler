@@ -1,7 +1,7 @@
 # Duty Matrix
 
 A duty scheduling, absence tracking, and workforce planning application.
-Built with Laravel 11, Filament v3 (TALL), PostgreSQL 16, and Redis 7, and
+Built with Laravel 12, Filament v3 (TALL), PostgreSQL 16, and Redis 7, and
 configured to run with Docker.
 
 ## Getting started
@@ -240,6 +240,33 @@ is shown in the tooltip.
 
 New period types are added by implementing `App\Periods\PeriodType` and
 registering the class in `App\Periods\PeriodTypes`; no migration is needed.
+
+## Activity log
+
+User actions are recorded with
+[spatie/laravel-activitylog](https://github.com/spatie/laravel-activitylog) and
+shown to administrators on **Settings → Activity log**, with filters by user,
+area, action, object and date. The **History** button on edit pages (users,
+event types, groups, periods, duty limits, roles) and in the event dialog of
+the matrix opens the log filtered to that record.
+
+What is recorded:
+
+- **Records and settings** — creating, updating and deleting users (profile
+  fields only, never passwords), event types, groups, periods, duty limits,
+  roles, synergies and application settings, with old and new values of the
+  changed fields. Changes of relations (roles, groups, permissions, event types
+  of a limit, members of a group) are recorded as "Relations updated".
+- **Schedule** — every change of the approved schedule, and one summary entry
+  per operation: auto-generation, creating, duplicating, renaming, clearing,
+  deleting and approving a draft, clearing a month. Bulk operations do not
+  record each created or deleted event. Edits inside drafts are not recorded.
+- **Sign-in** — sign-ins, sign-outs and failed attempts (with the email and IP
+  address, never the password).
+
+Entries are kept for a year (`activitylog.delete_records_older_than_days`).
+No scheduler is needed: the first entry of each day queues a job for the
+queue worker that deletes older entries.
 
 ## Time unit: days or hours
 

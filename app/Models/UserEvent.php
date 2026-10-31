@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsActivity;
+use App\Support\AuditLog;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,6 +13,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class UserEvent extends Model
 {
     use HasFactory;
+    use RecordsActivity {
+        shouldLogEvent as protected shouldLogActivityEvent;
+    }
 
     protected $attributes = [
         'status' => 'approved',
@@ -37,6 +42,25 @@ class UserEvent extends Model
             'ends_at' => 'datetime',
             'has_warning' => 'boolean',
         ];
+    }
+
+    /**
+     * Only the approved schedule is logged event by event; drafts are scratch
+     * work, their operations (creation, approval, ...) are logged as a whole.
+     */
+    protected function shouldLogEvent(string $eventName): bool
+    {
+        return $this->schedule_draft_id === null && $this->shouldLogActivityEvent($eventName);
+    }
+
+    protected function activityLogName(): string
+    {
+        return AuditLog::LOG_SCHEDULE;
+    }
+
+    protected function activityLogAttributes(): array
+    {
+        return ['user_id', 'event_type_id', 'starts_at', 'ends_at', 'status', 'note'];
     }
 
     public function user(): BelongsTo

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsActivity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -13,6 +14,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  */
 class DutyLimit extends Model
 {
+    use RecordsActivity;
+
     public const SEVERITY_FORBIDDEN = 'forbidden';
 
     public const SEVERITY_WARNING = 'warning';

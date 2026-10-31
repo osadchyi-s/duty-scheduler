@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\UserResource\RelationManagers;
 
+use App\Models\Synergy;
 use App\Models\User;
+use App\Support\AuditLog;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -15,6 +17,12 @@ use Illuminate\Validation\Rule;
 class SynergiesRelationManager extends RelationManager
 {
     protected static string $relationship = 'synergies';
+
+    /** Event types of a synergy are a BelongsToMany relation, logged explicitly. */
+    protected const LOGGED_RELATIONS = ['eventTypes' => 'name'];
+
+    /** @var array<string, array<int, string>> */
+    protected array $relationsBeforeSave = [];
 
     protected const SCORE_NEGATIVE = -1;
 
@@ -89,10 +97,15 @@ class SynergiesRelationManager extends RelationManager
                         unset($data['other_user_id']);
 
                         return $data;
-                    }),
+                    })
+                    ->after(fn (Synergy $record) => AuditLog::recordRelationChanges($record, [], self::LOGGED_RELATIONS)),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->before(function (Synergy $record): void {
+                        $this->relationsBeforeSave = AuditLog::relationSnapshot($record, self::LOGGED_RELATIONS);
+                    })
+                    ->after(fn (Synergy $record) => AuditLog::recordRelationChanges($record, $this->relationsBeforeSave, self::LOGGED_RELATIONS)),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->emptyStateHeading(__('No synergies have been added yet'))

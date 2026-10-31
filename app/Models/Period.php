@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsActivity;
 use App\Periods\PeriodType;
 use App\Periods\PeriodTypes;
 use App\Periods\PeriodWindow;
@@ -11,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Period extends Model
 {
+    use RecordsActivity;
+
     protected $fillable = [
         'name',
         'type',

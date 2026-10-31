@@ -71,3 +71,32 @@ it('marks understaffed days in the header with the missing event types in the to
     $page->set('showHighlights.capacity', false);
     expect(countClass($page->html(), 'dm-deficit-head'))->toBe(0);
 });
+
+it('computes rest zones only after the event', function () {
+    config(['scheduling.time_unit' => 'days']);
+    $type = EventType::create(['name' => 'Чергування', 'code' => 'duty', 'color_code' => '#3B82F6',
+        'min_rest_hours' => 24, 'preferred_rest_hours' => 48, 'is_active' => true]);
+    $noRest = EventType::create(['name' => 'Без відпочинку', 'code' => 'free', 'color_code' => '#000000',
+        'min_rest_hours' => 0, 'preferred_rest_hours' => 0, 'is_active' => true]);
+    $user = User::first();
+    $event = fn (EventType $t, string $from, string $to) => \App\Models\UserEvent::create([
+        'user_id' => $user->id, 'event_type_id' => $t->id, 'starts_at' => $from, 'ends_at' => $to,
+    ])->load('eventType');
+
+    $page = Livewire::test(DutyMatrix::class)->instance();
+
+    // Duty on 10.11: required rest on 11.11, preferred rest on 12.11.
+    expect($page->restZone($event($type, '2026-11-10 00:00:00', '2026-11-11 00:00:00')))
+        ->toBe(['from' => '2026-11-11', 'minUntil' => '2026-11-12', 'preferredUntil' => '2026-11-13'])
+        // Across the DST switch on 25.10 the zone still covers whole days.
+        ->and($page->restZone($event($type, '2026-10-24 00:00:00', '2026-10-25 00:00:00')))
+        ->toBe(['from' => '2026-10-25', 'minUntil' => '2026-10-26', 'preferredUntil' => '2026-10-27'])
+        // No rest rules: empty zones.
+        ->and($page->restZone($event($noRest, '2026-11-10 00:00:00', '2026-11-11 00:00:00')))
+        ->toBe(['from' => '2026-11-11', 'minUntil' => '2026-11-11', 'preferredUntil' => '2026-11-11']);
+
+    config(['scheduling.time_unit' => 'hours']);
+    // Hours mode: a shift ending at 08:00 rests until 08:00 the next day, so both days are in the zone.
+    expect($page->restZone($event($type, '2026-11-10 08:00:00', '2026-11-11 08:00:00')))
+        ->toBe(['from' => '2026-11-11', 'minUntil' => '2026-11-13', 'preferredUntil' => '2026-11-14']);
+});

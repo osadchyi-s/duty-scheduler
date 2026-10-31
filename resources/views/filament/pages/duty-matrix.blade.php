@@ -36,17 +36,20 @@
     </style>
 
     <div x-data="{
-            restZone: { userId: null, minUntil: null, preferredUntil: null },
-            setRest(userId, minUntil, preferredUntil) {
-                this.restZone = { userId: userId, minUntil: minUntil, preferredUntil: preferredUntil };
+            {{-- Rest after the hovered event: [from, minUntil) is required rest, [minUntil, preferredUntil)
+                 is preferred rest. Dates are Y-m-d strings, ends exclusive (see DutyMatrix::restZone()). --}}
+            restZone: { userId: null, from: null, minUntil: null, preferredUntil: null },
+            setRest(userId, from, minUntil, preferredUntil) {
+                this.restZone = { userId: userId, from: from, minUntil: minUntil, preferredUntil: preferredUntil };
             },
-            clearRest() { this.restZone = { userId: null, minUntil: null, preferredUntil: null }; },
+            clearRest() { this.restZone = { userId: null, from: null, minUntil: null, preferredUntil: null }; },
             inMinZone(userId, dateIso) {
-                return this.restZone.userId === userId && this.restZone.minUntil && dateIso < this.restZone.minUntil;
+                const zone = this.restZone;
+                return zone.userId === userId && dateIso >= zone.from && dateIso < zone.minUntil;
             },
             inPreferredZone(userId, dateIso) {
-                return this.restZone.userId === userId && this.restZone.preferredUntil
-                    && dateIso >= (this.restZone.minUntil ?? '') && dateIso < this.restZone.preferredUntil;
+                const zone = this.restZone;
+                return zone.userId === userId && dateIso >= zone.minUntil && dateIso < zone.preferredUntil;
             }
          }"
          class="space-y-4"
@@ -225,8 +228,7 @@
                                     @if(count($dayEvents))
                                         @foreach($dayEvents as $event)
                                             @php
-                                                $minUntil = $event->ends_at->copy()->addHours($event->eventType->min_rest_hours)->format('Y-m-d');
-                                                $prefUntil = $event->ends_at->copy()->addHours($event->eventType->preferred_rest_hours)->format('Y-m-d');
+                                                $restZone = $this->restZone($event);
                                             @endphp
                                             @php
                                                 $eventNote = $this->displayEventNote($event->note);
@@ -239,7 +241,7 @@
                                                 @endphp
                                             <button type="button"
                                                 wire:click="mountAction('assign', { userId: {{ $employee->id }}, date: '{{ $dateKey }}', eventId: {{ $event->id }} })"
-                                                @mouseenter="setRest({{ $employee->id }}, '{{ $minUntil }}', '{{ $prefUntil }}')"
+                                                @mouseenter="setRest({{ $employee->id }}, '{{ $restZone['from'] }}', '{{ $restZone['minUntil'] }}', '{{ $restZone['preferredUntil'] }}')"
                                                 @mouseleave="clearRest()"
                                                 class="w-full rounded px-0.5 py-0.5 text-white text-[9px] leading-tight relative"
                                                 style="background-color: {{ $event->eventType->color_code }};{{ $employee->is_active ? '' : ' opacity: .45;' }}"

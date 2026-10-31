@@ -482,6 +482,47 @@ class DutyMatrix extends Page implements HasForms, HasActions
         return $day->copy()->startOfDay()->lt(today());
     }
 
+    /**
+     * Days of rest after an event, by the rules of its type, for the hover
+     * highlight: required rest is [from, minUntil), preferred rest is
+     * [minUntil, preferredUntil). Dates are Y-m-d, end dates exclusive. Rest
+     * starts on the day the event ends (in "days" mode: the day after its last day).
+     *
+     * @return array{from: string, minUntil: string, preferredUntil: string}
+     */
+    public function restZone(UserEvent $event): array
+    {
+        $from = $event->ends_at->copy()->startOfDay();
+        $minUntil = $this->restZoneEnd($event->ends_at, $event->eventType->min_rest_hours, $from);
+        $preferredUntil = $this->restZoneEnd($event->ends_at, $event->eventType->preferred_rest_hours, $from);
+
+        return [
+            'from' => $from->toDateString(),
+            'minUntil' => $minUntil->toDateString(),
+            // A preferred rest shorter than the required one adds nothing.
+            'preferredUntil' => $preferredUntil->max($minUntil)->toDateString(),
+        ];
+    }
+
+    /**
+     * Exclusive end day of a rest of $hours after $endsAt: a day that is only
+     * partly within the rest (hours mode) still counts.
+     */
+    protected function restZoneEnd(Carbon $endsAt, int $hours, Carbon $from): Carbon
+    {
+        if ($hours <= 0) {
+            return $from->copy();
+        }
+
+        // Calendar days in "days" mode, so a DST switch does not shift the end by an hour.
+        $restEnd = TimeUnit::usesDays()
+            ? $endsAt->copy()->addDays((int) ceil($hours / TimeUnit::HOURS_PER_DAY))
+            : $endsAt->copy()->addHours($hours);
+        $day = $restEnd->copy()->startOfDay();
+
+        return $restEnd->eq($day) ? $day : $day->addDay();
+    }
+
     protected function isPastDate(?string $value): bool
     {
         return filled($value) && $this->isPastDay(Carbon::parse($value));

@@ -58,6 +58,7 @@ resources/views/filament/pages/
   duty-matrix.blade.php         ← сітка матриці, sticky-колонка, Alpine hover-підсвічування
   period-statistics.blade.php
 tests/Unit/ConstraintsEngineTest.php  ← Pest-тести на всі 4 рівні Constraints Engine
+.agents/skills/              ← інструкції для AI-агентів (правила проєкту, домен, процедури)
 docker-compose.yml           ← локальний стек розробки
 compose.prod.yml, deploy/    ← продакшн і staging (див. «Розгортання на продакшн»)
 Dockerfile, Makefile, docker/

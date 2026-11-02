@@ -69,6 +69,7 @@ resources/views/filament/pages/
   auto-schedule.blade.php
   period-statistics.blade.php
 tests/Unit/          Constraints Engine and AutoScheduler tests
+.agents/skills/              Instructions for AI coding agents (project rules, domain, procedures)
 docker-compose.yml           Local development stack
 compose.prod.yml, deploy/    Production and staging (see Production deployment)
 Dockerfile, Makefile, docker/

@@ -1,6 +1,8 @@
 # Keeps secrets, local state and development files out of the build context and images.
 .git
 .github
+.agents
+.claude
 .idea
 .vscode
 .DS_Store

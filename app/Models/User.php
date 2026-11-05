@@ -64,10 +64,26 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(UserEvent::class);
     }
 
+    /**
+     * Synergy pairs are unordered: the employee is either user A or user B.
+     * HasMany always adds "user_a_id = ?"; a plain orWhere() after it would let
+     * later conditions bind only to the OR branch ("... or user_b_id = ? and id = ?"),
+     * so looking up one record (Filament edit/delete) returned the first pair of
+     * user A. The constraint is therefore replaced by one parenthesized group.
+     */
     public function synergies(): HasMany
     {
-        return $this->hasMany(Synergy::class, 'user_a_id')
-            ->orWhere('user_b_id', $this->getKey());
+        $relation = $this->hasMany(Synergy::class, 'user_a_id');
+
+        $base = $relation->getQuery()->getQuery();
+        $base->wheres = [];
+        $base->bindings['where'] = [];
+
+        $relation->where(fn ($query) => $query
+            ->where('user_a_id', $this->getKey())
+            ->orWhere('user_b_id', $this->getKey()));
+
+        return $relation;
     }
 
     public function employeeGroups(): BelongsToMany

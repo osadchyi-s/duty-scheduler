@@ -57,3 +57,33 @@ Tests use SQLite in memory (`phpunit.xml`), `RefreshDatabase` for `Unit` and
 - Weighted random selection in `AutoScheduler` makes some assertions flaky if
   they depend on chance; assert invariants (fairness bounds, limits) instead,
   and repeat a suspicious test 10–20 times before trusting it.
+
+## Visual check of a page (screenshot)
+
+Tests do not show layout. To look at a page without a browser session:
+
+1. Render it as a user in **a separate tinker process per page** — Livewire
+   injects its scripts only once per PHP process, so a second page rendered in
+   the same process has no `livewire.js` and stays blank (`x-cloak`):
+
+   ```bash
+   docker compose exec -T app php artisan tinker --execute '
+   Auth::guard("web")->setUser(App\Models\User::find(1));
+   file_put_contents("/tmp/page.html", app(Illuminate\Contracts\Http\Kernel::class)
+       ->handle(Illuminate\Http\Request::create("http://localhost:8080/admin/duty-matrix?month=2026-11"))->getContent());'
+   ```
+
+   Use the full URL with port 8080, so asset URLs point to the dev nginx.
+2. Serve the file from the same origin (a `file://` page cannot load the
+   panel scripts), take the screenshot, and **delete the temporary file**:
+
+   ```bash
+   docker compose cp app:/tmp/page.html public/zz-tmp-page.html
+   google-chrome --headless=new --no-sandbox --hide-scrollbars --window-size=1920,1080 \
+       --virtual-time-budget=8000 --screenshot=/tmp/page.png http://localhost:8080/zz-tmp-page.html
+   rm public/zz-tmp-page.html
+   ```
+
+3. Open the PNG to review it; describe what you saw, and still ask the user to
+   check interactive behaviour (dropdowns, modals, drag and drop) in a browser.
+

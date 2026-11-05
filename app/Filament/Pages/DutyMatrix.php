@@ -28,6 +28,8 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Support\Enums\ActionSize;
+use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\HtmlString;
@@ -139,6 +141,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
                 ->label(fn (): string => $this->draft ? __('Auto-generate in this draft') : __('Auto-generate a new draft'))
                 ->icon('heroicon-o-sparkles')
                 ->color('gray')
+                ->size(ActionSize::Small)
                 ->visible(fn (): bool => $this->canManageDrafts())
                 ->form(AutoSchedule::formSchema(withDraftSelect: false))
                 ->fillForm(fn (): array => AutoSchedule::defaultFormData($this->month))
@@ -152,13 +155,25 @@ class DutyMatrix extends Page implements HasForms, HasActions
                 ->label(__('Approve draft'))
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
+                ->size(ActionSize::Small)
                 ->visible(fn (): bool => $this->draft !== null && (auth()->user()?->can('approve', $this->draft) ?? false))
                 ->modalHeading(fn (): string => __('Approve the draft “:name”?', ['name' => $this->draft?->name]))
                 ->modalSubmitActionLabel(__('Approve'))
                 ->form(fn (): array => $this->approvalFormSchema())
                 ->action(fn (array $data, ScheduleDraftService $drafts) => $this->approveDraft($data, $drafts)),
+            Action::make('export')
+                ->label(__('Export to Excel'))
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('success')
+                ->size(ActionSize::Small)
+                ->action(fn () => Excel::download(
+                    new ScheduleExport($this->month, $this->draft?->id),
+                    'duty-matrix-'.$this->month.($this->draft ? '-'.Str::slug($this->draft->name) : '').'.xlsx'
+                )),
+            // Rarely used actions are grouped behind one button to keep the toolbar to one row.
             ActionGroup::make([
                 Action::make('rename_draft')
+                    ->visible(fn (): bool => $this->draft !== null)
                     ->label(__('Rename'))
                     ->icon('heroicon-o-pencil-square')
                     ->form([
@@ -173,6 +188,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
                         Notification::make()->title(__('Draft renamed'))->success()->send();
                     }),
                 Action::make('duplicate_draft')
+                    ->visible(fn (): bool => $this->draft !== null)
                     ->label(__('Duplicate'))
                     ->icon('heroicon-o-document-duplicate')
                     ->action(function (ScheduleDraftService $drafts): void {
@@ -182,6 +198,7 @@ class DutyMatrix extends Page implements HasForms, HasActions
                         Notification::make()->title(__('Draft duplicated'))->success()->send();
                     }),
                 Action::make('delete_draft')
+                    ->visible(fn (): bool => $this->draft !== null)
                     ->label(__('Delete draft'))
                     ->icon('heroicon-o-trash')
                     ->color('danger')
@@ -200,34 +217,34 @@ class DutyMatrix extends Page implements HasForms, HasActions
                         $this->selectDraft(null);
                         Notification::make()->title(__('Draft deleted'))->success()->send();
                     }),
+                Action::make('clear_month')
+                    ->label(fn (): string => $this->draft ? __('Clear draft') : __('Clear month'))
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->visible(fn (): bool => $this->draft ? $this->canManageDrafts() : (auth()->user()?->hasRole('Admin') ?? false))
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (): string => $this->draft ? __('Clear the draft?') : __('Clear the current month?'))
+                    ->modalDescription(fn (): string => $this->draft
+                        ? __('All events of this draft are deleted. The approved schedule does not change.')
+                        : __('This permanently deletes all active events in the current month. This changes the schedule and cannot be undone. Continue?'))
+                    ->action(function (): void {
+                        $this->clearCurrentMonth();
+                    }),
             ])
-                ->label(__('Draft'))
                 ->icon('heroicon-m-ellipsis-vertical')
-                ->button()
-                ->color('gray')
-                ->visible(fn (): bool => $this->draft !== null),
-            Action::make('clear_month')
-                ->label(fn (): string => $this->draft ? __('Clear draft') : __('Clear month'))
-                ->icon('heroicon-o-trash')
-                ->color('danger')
-                ->visible(fn (): bool => $this->draft ? $this->canManageDrafts() : (auth()->user()?->hasRole('Admin') ?? false))
-                ->requiresConfirmation()
-                ->modalHeading(fn (): string => $this->draft ? __('Clear the draft?') : __('Clear the current month?'))
-                ->modalDescription(fn (): string => $this->draft
-                    ? __('All events of this draft are deleted. The approved schedule does not change.')
-                    : __('This permanently deletes all active events in the current month. This changes the schedule and cannot be undone. Continue?'))
-                ->action(function (): void {
-                    $this->clearCurrentMonth();
-                }),
-            Action::make('export')
-                ->label(__('Export to Excel'))
-                ->icon('heroicon-o-arrow-down-tray')
-                ->color('success')
-                ->action(fn () => Excel::download(
-                    new ScheduleExport($this->month, $this->draft?->id),
-                    'duty-matrix-'.$this->month.($this->draft ? '-'.Str::slug($this->draft->name) : '').'.xlsx'
-                )),
+                ->tooltip(__('More actions'))
+                ->color('gray'),
         ];
+    }
+
+    /**
+     * Compact toolbar instead of the default header (big heading + actions): tabs,
+     * month, highlight and legend dropdowns and the actions share one row, so more
+     * employees fit on the screen. The page title stays in the browser tab and menu.
+     */
+    public function getHeader(): ?View
+    {
+        return view('filament.pages.duty-matrix-header');
     }
 
     public function canManageDrafts(): bool

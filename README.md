@@ -115,6 +115,10 @@ the matrix.
   interactive assignment, rest-period highlighting, and staffing deficit
   indicators. Administrators and managers also see one tab per schedule
   draft of the month (see [Schedule drafts](#schedule-drafts)).
+- The matrix is compact: a one-row toolbar (tabs, month, highlight and legend
+  dropdowns, actions), 11px rows, and its own scroll area that fills the
+  window with the dates pinned at the top and the "Unassigned" row at the
+  bottom. The sidebar can be collapsed for more width.
 - Employees can be reordered by drag and drop on the employees page; the
   duty matrix (with a row number column and "Name (position)" in one line)
   and the export use the same order.

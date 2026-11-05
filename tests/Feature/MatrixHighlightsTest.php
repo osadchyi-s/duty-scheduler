@@ -40,21 +40,34 @@ it('highlights dates with a staffing deficit', function () {
     expect(countClass($html, 'dm-deficit'))->toBe(30);
 });
 
-it('uses only color utilities that exist in the precompiled Filament CSS', function () {
-    // The project has no Tailwind build: a utility missing from Filament's CSS silently does nothing.
+it('uses only utilities that exist in the precompiled Filament CSS', function () {
+    // The project has no Tailwind build: a utility missing from Filament's CSS silently does
+    // nothing (colors, but also sizes, spacing and positioning, e.g. text-[11px], py-0.5, left-0).
     $css = file_get_contents(public_path('css/filament/filament/app.css'));
-    $view = file_get_contents(resource_path('views/filament/pages/duty-matrix.blade.php'));
-    preg_match_all('#(?:dark:|hover:)*(?:bg|text|border)-[a-z]+-\d+(?:/\d+)?#', $view, $matches);
+    $views = ['duty-matrix.blade.php', 'duty-matrix-header.blade.php'];
+    $pattern = '#^(?:dark:|hover:)*-?(?:bg|text|border|p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|w|h|min-w|max-w|gap|space-y|leading|left|right|top|bottom|rounded|z)-[\w.\[\]/-]+$#';
 
-    // Covered by the custom rules in the view (dark cell borders) or purely cosmetic.
-    $allowed = ['dark:border-gray-800', 'dark:hover:bg-gray-800/50'];
-    $missing = collect($matches[0])->unique()
+    $classes = collect($views)
+        ->flatMap(function (string $view) {
+            preg_match_all('/class="([^"]*)"/', file_get_contents(resource_path("views/filament/pages/{$view}")), $matches);
+
+            return collect($matches[1])->flatMap(fn (string $value) => preg_split('/\s+/', $value));
+        })
+        // Skip Blade expressions and the view's own dm-* classes.
+        ->reject(fn (string $class): bool => $class === '' || str_contains($class, '{') || str_contains($class, '$') || str_starts_with($class, 'dm-'))
+        ->filter(fn (string $class): bool => (bool) preg_match($pattern, $class))
+        ->unique();
+
+    // Purely cosmetic: row hover color in the dark theme.
+    $allowed = ['dark:hover:bg-gray-800/50'];
+    $missing = $classes
         ->reject(fn (string $class): bool => in_array($class, $allowed, true))
-        ->reject(fn (string $class): bool => str_contains($css, '.'.str_replace([':', '/'], ['\\:', '\\/'], $class)))
+        ->reject(fn (string $class): bool => str_contains($css, '.'.str_replace([':', '/', '[', ']', '.'], ['\\:', '\\/', '\\[', '\\]', '\\.'], $class)))
         ->values()
         ->all();
 
-    expect($missing)->toBe([]);
+    expect($classes)->not->toBeEmpty()
+        ->and($missing)->toBe([]);
 });
 
 it('marks understaffed days in the header with the missing event types in the tooltip', function () {

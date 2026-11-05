@@ -48,6 +48,8 @@ class AdminPanelProvider extends PanelProvider
             // Use the full page width (instead of the default 80rem container) on every page,
             // so tables such as the duty matrix, users or duty limits stretch across wide monitors.
             ->maxContentWidth(MaxWidth::Full)
+            // A collapsible sidebar gives wide pages such as the duty matrix more room on laptops.
+            ->sidebarCollapsibleOnDesktop()
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([

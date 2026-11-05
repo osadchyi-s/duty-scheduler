@@ -20,8 +20,15 @@ class User extends Authenticatable implements FilamentUser
 
     protected static function booted(): void
     {
+        // New employees are appended to the end of the manual order.
+        static::creating(function (User $user): void {
+            if (! $user->sort_order) {
+                $user->sort_order = (int) static::query()->max('sort_order') + 1;
+            }
+        });
+
         static::saved(function (User $user): void {
-            if ($user->wasChanged('is_active') || $user->wasChanged('name') || $user->wasRecentlyCreated) {
+            if ($user->wasChanged(['is_active', 'name', 'position', 'sort_order']) || $user->wasRecentlyCreated) {
                 MatrixCache::invalidateEmployees();
             }
         });
@@ -51,6 +58,7 @@ class User extends Authenticatable implements FilamentUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'sort_order' => 'integer',
         ];
     }
 

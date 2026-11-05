@@ -57,6 +57,7 @@ class ScheduleExport implements FromArray, WithStyles, WithEvents
             ->where(fn ($q) => $q->where('is_active', true)->orWhereHas('events', $eventsInMonth))
             ->with(['events' => fn ($q) => $eventsInMonth($q)->with('eventType')])
             ->orderByDesc('is_active')
+            ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
 

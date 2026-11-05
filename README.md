@@ -115,6 +115,9 @@ the matrix.
   interactive assignment, rest-period highlighting, and staffing deficit
   indicators. Administrators and managers also see one tab per schedule
   draft of the month (see [Schedule drafts](#schedule-drafts)).
+- Employees can be reordered by drag and drop on the employees page; the
+  duty matrix (with a row number column and "Name (position)" in one line)
+  and the export use the same order.
 - Inactive employees are listed in the matrix (and the export) only while
   they still have events in the period; they are shown last, struck through
   and marked "Inactive". New events cannot be assigned to them, neither

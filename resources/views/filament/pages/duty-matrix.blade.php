@@ -8,6 +8,10 @@
         .dm-vline-head      { border-right: 1px solid rgb(229 231 235); } /* gray-200 */
         .dark .dm-vline-head{ border-right-color: rgb(55 65 81); }        /* gray-700 */
         .dark td.dm-vline   { border-bottom-color: rgb(31 41 55); }       /* dark:border-gray-800 */
+        /* Number and employee columns stay visible while scrolling the days horizontally. */
+        .dm-col-num  { position: sticky; left: 0; z-index: 10; width: 2.25rem; min-width: 2.25rem; text-align: right;
+                       color: rgb(156 163 175); font-variant-numeric: tabular-nums; }
+        .dm-col-name { position: sticky; left: 2.25rem; z-index: 10; }
         /* Weekends (Saturday, Sunday): a neutral, lighter tone than weekdays and a lighter date. */
         .dm-weekend-head       { background-color: rgb(249 250 251); color: rgb(156 163 175); } /* gray-50 / gray-400 */
         .dark .dm-weekend-head { background-color: rgb(255 255 255 / .04); color: rgb(107 114 128); }
@@ -144,10 +148,13 @@
             {{-- table-fixed + w-full: side columns are fixed, day columns stretch evenly to fill the full width.
                  min-width keeps horizontal scroll on narrow screens (~36px per day). --}}
             <table class="w-full table-fixed text-[11px] border-collapse"
-                   style="min-width: {{ (150 + ($showStatsColumn ? 150 : 0)) + count($this->days) * 36 }}px">
+                   style="min-width: {{ (36 + 150 + ($showStatsColumn ? 150 : 0)) + count($this->days) * 36 }}px">
                 <thead>
                     <tr>
-                        <th class="dm-vline-head sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-2 py-1.5 text-left w-[150px]">
+                        <th class="dm-vline-head dm-col-num bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-2 py-1.5">
+                            {{ __('No.') }}
+                        </th>
+                        <th class="dm-vline-head dm-col-name bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-2 py-1.5 text-left">
                             {{ __('Employee') }}
                         </th>
                         @foreach($this->days as $day)
@@ -200,15 +207,17 @@
                             }
                         @endphp
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                            <td class="dm-vline-head sticky left-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-2 py-1 font-medium whitespace-nowrap"
+                            <td class="dm-vline-head dm-col-num bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-2 py-1">
+                                {{ $loop->iteration }}
+                            </td>
+                            <td class="dm-vline-head dm-col-name bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-2 py-1 font-medium whitespace-nowrap"
                                 @unless($employee->is_active) title="{{ __('Inactive employee: existing events are shown, new ones cannot be assigned.') }}" @endunless
                             >
                                 {{-- Inactive employees are listed only while they still have events in the period. --}}
-                                <span @unless($employee->is_active) style="color: rgb(156 163 175); text-decoration: line-through;" @endunless>{{ $employee->name }}</span>
+                                <span @unless($employee->is_active) style="color: rgb(156 163 175); text-decoration: line-through;" @endunless>{{ $employee->name }}</span>@if(filled($employee->position))<span class="text-gray-400 font-normal"> ({{ $employee->position }})</span>@endif
                                 @unless($employee->is_active)
                                     <span style="font-size: 9px; font-weight: 600; padding: 0 .3rem; border-radius: .25rem; color: rgb(107 114 128); background: rgb(229 231 235);">{{ __('Inactive') }}</span>
                                 @endunless
-                                <div class="text-[9px] text-gray-400 font-normal">{{ $employee->position }}</div>
                             </td>
 
                             @foreach($this->days as $day)
@@ -281,7 +290,8 @@
 
                     {{-- "Unassigned" summary row with staffing-deficit highlight (spec 5.2.3) --}}
                     <tr class="bg-gray-50 dark:bg-gray-800 font-medium">
-                        <td class="dm-vline-head sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 px-2 py-1">
+                        <td class="dm-vline-head dm-col-num bg-gray-50 dark:bg-gray-800 px-2 py-1"></td>
+                        <td class="dm-vline-head dm-col-name bg-gray-50 dark:bg-gray-800 px-2 py-1">
                             {{ __('Unassigned ⚠️') }}
                         </td>
                         @foreach($this->days as $day)

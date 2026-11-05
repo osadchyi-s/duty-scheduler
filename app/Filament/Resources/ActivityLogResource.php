@@ -77,6 +77,7 @@ class ActivityLogResource extends Resource
             'draft_cleared' => __('Draft cleared'),
             'draft_approved' => __('Draft approved'),
             'month_cleared' => __('Month cleared'),
+            'employees_reordered' => __('Employees reordered'),
             'login' => __('Signed in'),
             'logout' => __('Signed out'),
             'login_failed' => __('Failed sign-in'),

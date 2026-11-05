@@ -14,6 +14,11 @@ utilities Filament itself uses. Classes like `bg-red-50`, `bg-yellow-100`,
 render nothing, without any error. This already hid the weekend, rest-zone and
 staffing-deficit highlights of the matrix for months.
 
+Layout utilities are affected too: `sticky` exists but `left-0`, `table-fixed`
+and arbitrary values like `w-[150px]` or `text-[11px]` do not. The matrix pins
+its number and employee columns with `dm-col-num` / `dm-col-name` (explicit
+`left` offsets) for this reason.
+
 Check a class before using it:
 
 ```bash

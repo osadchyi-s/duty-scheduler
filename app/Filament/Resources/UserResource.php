@@ -121,6 +121,9 @@ class UserResource extends Resource
                 Tables\Columns\TextColumn::make('employeeGroups.name')->label(__('Groups'))->badge()->color('gray'),
                 Tables\Columns\IconColumn::make('is_active')->label(__('Active'))->boolean(),
             ])
+            // Manual order (drag and drop), also used by the duty matrix and the export.
+            ->defaultSort('sort_order')
+            ->reorderable('sort_order')
             ->filters([
                 Tables\Filters\SelectFilter::make('roles')->relationship('roles', 'name')->label(__('Role')),
                 Tables\Filters\SelectFilter::make('employeeGroups')->relationship('employeeGroups', 'name')->label(__('Group')),

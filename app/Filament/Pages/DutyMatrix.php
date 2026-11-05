@@ -473,12 +473,14 @@ class DutyMatrix extends Page implements HasForms, HasActions
                 ->where('status', '!=', 'cancelled')
                 ->overlappingPeriod($start, $end);
 
-            // Inactive employees are listed only while they still have events in the period (shown last).
+            // Manual order of the employees page; inactive employees are listed last and only
+            // while they still have events in the period.
             return User::query()
                 ->whereHas('roles', fn ($q) => $q->whereIn('name', ['User', 'Manager', 'Admin']))
                 ->where(fn ($q) => $q->where('is_active', true)->orWhereHas('events', $eventsInPeriod))
                 ->with(['events' => fn ($q) => $eventsInPeriod($q)->with('eventType')])
                 ->orderByDesc('is_active')
+                ->orderBy('sort_order')
                 ->orderBy('name')
                 ->get();
         });

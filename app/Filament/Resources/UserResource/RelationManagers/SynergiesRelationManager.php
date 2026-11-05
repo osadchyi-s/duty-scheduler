@@ -56,6 +56,7 @@ class SynergiesRelationManager extends RelationManager
             Forms\Components\ViewField::make('score')
                 ->label(__('Synergy level'))
                 ->view('filament.forms.components.synergy-score')
+                ->helperText(__('Red: auto-generation never assigns this pair on the same day; a manual assignment shows a warning.'))
                 ->viewData(['scoreColors' => self::SCORE_COLORS])
                 ->default((string) self::SCORE_NEUTRAL)
                 // Older records may hold any integer; show them by their sign.

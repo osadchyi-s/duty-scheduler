@@ -18,23 +18,26 @@
 
         /* Matrix: small text and tight cells, so many employees fit on one screen. The sizes grow
            on wide monitors; adjust them here (laptops / >= 1600px / >= 2200px). */
-        .dm-table { --dm-font: 11px; --dm-event-font: 10px; --dm-small-font: 9px; --dm-cell-pad: 1px; --dm-add-height: 14px; }
+        .dm-table { --dm-font: 11px; --dm-event-font: 10px; --dm-small-font: 9px; --dm-cell-pad: 1px; --dm-row-height: 18px; }
         @media (min-width: 1600px) {
-            .dm-table { --dm-font: 11.9px; --dm-event-font: 10.9px; --dm-small-font: 9.5px; --dm-cell-pad: 2px; --dm-add-height: 16px; }
+            .dm-table { --dm-font: 11.9px; --dm-event-font: 10.9px; --dm-small-font: 9.5px; --dm-cell-pad: 2px; --dm-row-height: 21px; }
         }
         @media (min-width: 2200px) {
-            .dm-table { --dm-font: 13.3px; --dm-event-font: 12.35px; --dm-small-font: 10.45px; --dm-cell-pad: 3px; --dm-add-height: 19px; }
+            .dm-table { --dm-font: 13.3px; --dm-event-font: 12.35px; --dm-small-font: 10.45px; --dm-cell-pad: 3px; --dm-row-height: 25px; }
         }
         .dm-scroller   { overflow: auto; border: 1px solid rgb(229 231 235); border-radius: .75rem; background-color: #fff; }
         .dark .dm-scroller { border-color: rgb(55 65 81); background-color: rgb(17 24 39); }
         .dm-table      { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--dm-font); line-height: 1.25; }
         .dm-th         { padding: 2px 3px; font-weight: 600; text-align: center; }
         .dm-td-name    { padding: var(--dm-cell-pad) 6px; font-weight: 500; white-space: nowrap; }
-        .dm-cell       { padding: var(--dm-cell-pad); text-align: center; vertical-align: middle; }
+        /* Day cells: the events (or the empty "add" button) fill the whole cell; several events
+           of one day share its height. The row height is set here, not by the cell content. */
+        .dm-cell       { position: relative; height: var(--dm-row-height); padding: 0; text-align: center; vertical-align: middle; }
+        .dm-cell-fill  { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 1px; }
         .dm-dow        { display: block; font-size: var(--dm-small-font); font-weight: 400; color: rgb(156 163 175); }
-        .dm-event      { position: relative; display: block; width: 100%; padding: 1px 2px; border-radius: .25rem;
-                         font-size: var(--dm-event-font); line-height: 1.2; color: #fff; white-space: nowrap; }
-        .dm-event-warn { position: absolute; top: -5px; right: -4px; font-size: var(--dm-small-font); }
+        .dm-event      { position: relative; flex: 1 1 0; min-height: 0; display: flex; align-items: center; justify-content: center;
+                         padding: 0 2px; overflow: hidden; font-size: var(--dm-event-font); line-height: 1.1; color: #fff; white-space: nowrap; }
+        .dm-event-warn { position: absolute; top: 0; right: 1px; font-size: var(--dm-small-font); line-height: 1; }
         /* Cell borders (separate border model, so sticky cells keep their borders while scrolling). */
         .dm-table th, .dm-table td { border-bottom: 1px solid rgb(243 244 246); }
         .dark .dm-table th, .dark .dm-table td { border-bottom-color: rgb(31 41 55); }
@@ -77,8 +80,7 @@
         .dm-deficit-head span  { color: rgb(254 226 226); }
         .dark .dm-deficit-head { background-color: rgb(185 28 28); }
         /* "+" button of an empty cell. */
-        .dm-add                { display: block; width: 100%; height: var(--dm-add-height); line-height: var(--dm-add-height);
-                                 border-radius: .25rem; color: rgb(209 213 219); }
+        .dm-add                { flex: 1 1 0; width: 100%; }
         .dm-add:hover          { background-color: rgb(var(--primary-100)); color: rgb(var(--primary-600)); }
         .dark .dm-add:hover    { background-color: rgb(var(--primary-900) / .3); color: rgb(var(--primary-400)); }
         /* Past dates: dimmed like inactive employees. Only the content is dimmed, so the
@@ -202,6 +204,7 @@
                                         'dm-rest-preferred': {{ $showHighlights['rest_zones'] ? 'true' : 'false' }} && inPreferredZone({{ $employee->id }}, '{{ $dateKey }}')
                                     }"
                                 >
+                                    <div class="dm-cell-fill">
                                     @if(count($dayEvents))
                                         @foreach($dayEvents as $event)
                                             @php
@@ -231,12 +234,14 @@
                                             </button>
                                         @endforeach
                                     @elseif($employee->is_active)
+                                        {{-- Empty cell: no "+" sign, but the whole cell adds an event. --}}
                                         <button type="button"
                                             wire:click="mountAction('assign', { userId: {{ $employee->id }}, date: '{{ $dateKey }}' })"
-                                            class="dm-add">
-                                            +
-                                        </button>
+                                            class="dm-add"
+                                            aria-label="{{ __('Assign event') }}"
+                                        ></button>
                                     @endif
+                                    </div>
                                 </td>
                             @endforeach
 

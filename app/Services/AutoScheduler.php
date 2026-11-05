@@ -207,7 +207,8 @@ class AutoScheduler
             foreach ($candidates as $candidate) {
                 $check = $this->engine->validate($candidate, $eventType, $startsAt, $endsAt, null, $draft);
 
-                if (! $check->isAllowed) {
+                // Synergy -1 is a hard rule for auto-generation (manual assignments only warn).
+                if (! $check->isAllowed || $check->synergyConflict) {
                     continue;
                 }
 

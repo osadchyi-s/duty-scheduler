@@ -318,5 +318,7 @@
     "Highlights": "Highlights",
     "Legend": "Legend",
     "More actions": "More actions",
-    "Year": "Year"
+    "Year": "Year",
+    "Unwanted pairing with :name (“:event”) on this day (synergy −1).": "Unwanted pairing with :name (“:event”) on this day (synergy −1).",
+    "Red: auto-generation never assigns this pair on the same day; a manual assignment shows a warning.": "Red: auto-generation never assigns this pair on the same day; a manual assignment shows a warning."
 }

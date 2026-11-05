@@ -156,9 +156,15 @@ the matrix.
 Each synergy record represents an **unordered employee pair**. The score is
 stored once, shown on both employees' profiles, and duplicate pair records are
 not created. The score has three states: `1` (positive) increases the chance
-that the employees will be assigned together, `-1` (negative) decreases it, and
-`0` (neutral) has no effect. Records created before the switch was introduced
-may hold other integers; the interface shows them by their sign.
+that the employees will be assigned together, `0` (neutral) has no effect, and
+`-1` marks an **unwanted pairing**: auto-generation never gives both employees
+working events on the same day (the slot stays unfilled if nobody else fits);
+a manual assignment or a draft approval is allowed but shows a warning, and the
+matrix marks such pairs with ⚠️, also for existing events. A pairing counts
+when the synergy applies to the event types of both employees (or has no event
+types) and both events are working time — a vacation of one employee does not
+count. Records created before the switch was introduced may hold other
+integers; the interface shows them by their sign.
 
 Select the event types for which the score should apply. If no event types are
 selected, it applies to all event types. During schedule generation, the

@@ -14,6 +14,7 @@ use App\Services\ConstraintCheckResult;
 use App\Services\ConstraintsEngine;
 use App\Services\DutyLimitChecker;
 use App\Services\ScheduleDraftService;
+use App\Services\SynergyChecker;
 use App\Support\AuditLog;
 use App\Support\MatrixCache;
 use App\Support\TimeUnit;
@@ -588,17 +589,22 @@ class DutyMatrix extends Page implements HasForms, HasActions
     protected ?array $limitViolations = null;
 
     /**
-     * Warning reasons for an event: the one stored when it was saved, plus any
-     * duty limit it currently exceeds (also for events created before the limit).
+     * Warning reasons for an event: the one stored when it was saved, plus the
+     * duty limits it currently exceeds and unwanted pairings (synergy -1) on its
+     * days. Both are computed live, so they also show for older events.
      *
      * @return array<int, string>
      */
     public function eventWarnings(UserEvent $event): array
     {
-        $this->limitViolations ??= app(DutyLimitChecker::class)->violations(
-            $this->employees->flatMap(fn (User $user) => $user->events),
-            $this->draft,
-        );
+        if ($this->limitViolations === null) {
+            $events = $this->employees->flatMap(fn (User $user) => $user->events);
+            $this->limitViolations = app(DutyLimitChecker::class)->violations($events, $this->draft);
+            // Merged by hand: array_merge_recursive() would renumber the event id keys.
+            foreach (app(SynergyChecker::class)->violations($events) as $eventId => $reasons) {
+                $this->limitViolations[$eventId] = array_merge($this->limitViolations[$eventId] ?? [], $reasons);
+            }
+        }
 
         $warnings = $event->has_warning && filled($event->warning_reason) ? [$event->warning_reason] : [];
         foreach ($this->limitViolations[$event->id] ?? [] as $reason) {

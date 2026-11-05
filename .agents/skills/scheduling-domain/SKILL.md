@@ -91,4 +91,8 @@ chain; a soft duty-limit warning is merged with the rest result.
 - Past dates are dimmed; assigning or generating there is allowed but warns.
 - Event types and employees with events cannot be deleted (FK `RESTRICT`);
   deactivate them instead.
-- Synergy is three-state: -1, 0, 1.
+- Synergy is three-state: -1, 0, 1. **-1 = unwanted pairing** (`SynergyChecker`):
+  both employees with working events on the same day, the synergy applying to
+  both event types (no types = all). Auto-generation never creates it
+  (`ConstraintCheckResult::$synergyConflict` → candidate skipped); manual
+  assignment and draft approval only warn; the matrix shows it live.

@@ -318,5 +318,7 @@
     "Highlights": "Підсвічування",
     "Legend": "Легенда",
     "More actions": "Інші дії",
-    "Year": "Рік"
+    "Year": "Рік",
+    "Unwanted pairing with :name (“:event”) on this day (synergy −1).": "Небажане поєднання з :name («:event») у цей день (синергія −1).",
+    "Red: auto-generation never assigns this pair on the same day; a manual assignment shows a warning.": "Червоний: автогенерація ніколи не ставить цю пару в один день; ручне призначення показує попередження."
 }

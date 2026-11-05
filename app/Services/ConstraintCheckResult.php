@@ -16,6 +16,9 @@ class ConstraintCheckResult
         public readonly string $status,
         public readonly ?string $reason = null,
         public readonly ?float $restHours = null,
+        // Unwanted pairing (synergy -1) on the same day: a warning for manual
+        // assignments, a reason to skip the candidate in auto-generation.
+        public readonly bool $synergyConflict = false,
     ) {
     }
 
@@ -24,9 +27,9 @@ class ConstraintCheckResult
         return new self(true, self::STATUS_OPTIMAL, null, $restHours);
     }
 
-    public static function warning(string $reason, ?float $restHours = null): self
+    public static function warning(string $reason, ?float $restHours = null, bool $synergyConflict = false): self
     {
-        return new self(true, self::STATUS_WARNING, $reason, $restHours);
+        return new self(true, self::STATUS_WARNING, $reason, $restHours, $synergyConflict);
     }
 
     public static function forbidden(string $reason, ?float $restHours = null): self

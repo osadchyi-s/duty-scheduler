@@ -25,8 +25,10 @@ use Illuminate\Support\Facades\Cache;
  */
 class ConstraintsEngine
 {
-    public function __construct(protected DutyLimitChecker $dutyLimits)
-    {
+    public function __construct(
+        protected DutyLimitChecker $dutyLimits,
+        protected SynergyChecker $synergies,
+    ) {
     }
 
     /**
@@ -64,25 +66,39 @@ class ConstraintsEngine
             return $limitResult;
         }
 
-        $restResult = $this->evaluateRestPeriod($user, $eventType, $startsAt, $endsAt, $ignoreEventId, $draft);
+        $result = $this->evaluateRestPeriod($user, $eventType, $startsAt, $endsAt, $ignoreEventId, $draft);
 
-        return $limitResult ? $this->mergeWarning($restResult, $limitResult) : $restResult;
+        if ($limitResult) {
+            $result = $this->mergeWarning($result, $limitResult);
+        }
+
+        // Unwanted pairings never forbid an assignment here; auto-generation skips them by the flag.
+        $pairings = $this->synergies->conflicts($user, $eventType, $startsAt, $endsAt, $ignoreEventId, $draft);
+        if ($pairings !== []) {
+            $result = $this->mergeWarning($result, ConstraintCheckResult::warning(implode(' ', $pairings), null, true));
+        }
+
+        return $result;
     }
 
     /**
-     * Adds a soft duty-limit warning to the rest evaluation; a forbidden rest result wins.
+     * Adds a warning (soft duty limit, unwanted pairing) to the result; a forbidden result wins.
      */
-    protected function mergeWarning(ConstraintCheckResult $restResult, ConstraintCheckResult $limitWarning): ConstraintCheckResult
+    protected function mergeWarning(ConstraintCheckResult $result, ConstraintCheckResult $warning): ConstraintCheckResult
     {
-        if (! $restResult->isAllowed) {
-            return $restResult;
+        if (! $result->isAllowed) {
+            return $result;
         }
 
-        $reason = $restResult->status === ConstraintCheckResult::STATUS_WARNING
-            ? $restResult->reason.' '.$limitWarning->reason
-            : $limitWarning->reason;
+        $reason = $result->status === ConstraintCheckResult::STATUS_WARNING
+            ? $result->reason.' '.$warning->reason
+            : $warning->reason;
 
-        return ConstraintCheckResult::warning($reason, $restResult->restHours);
+        return ConstraintCheckResult::warning(
+            $reason,
+            $result->restHours,
+            $result->synergyConflict || $warning->synergyConflict,
+        );
     }
 
     /**

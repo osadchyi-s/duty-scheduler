@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsActivity;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use InvalidArgumentException;
 
 class Synergy extends Model
 {
-    use HasFactory;
+    use HasFactory, RecordsActivity;
 
     protected static function booted(): void
     {

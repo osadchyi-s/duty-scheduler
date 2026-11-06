@@ -22,8 +22,11 @@ class EventTypePolicy
         return $user->hasRole(['Admin', 'Manager']);
     }
 
+    /**
+     * Event types with events keep their history and are deactivated instead.
+     */
     public function delete(User $user, EventType $eventType): bool
     {
-        return $user->hasRole('Admin');
+        return $user->hasRole('Admin') && ! $eventType->events()->exists();
     }
 }

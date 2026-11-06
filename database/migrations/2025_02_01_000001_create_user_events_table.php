@@ -16,13 +16,13 @@ return new class extends Migration
             $table->dateTime('ends_at');
             $table->enum('status', ['draft', 'approved', 'cancelled'])->default('draft');
             $table->boolean('has_rest_warning')->default(false)
-                ->comment('Призначення з використанням мінімального замість бажаного відпочинку');
+                ->comment('Assignment uses the minimum instead of the preferred rest');
             $table->string('warning_reason')->nullable();
             $table->text('note')->nullable();
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
-            // Матриця за місяць вантажиться одним запитом — індекси під основні фільтри.
+            // The monthly matrix is loaded with one query; indexes cover the main filters.
             $table->index(['user_id', 'starts_at', 'ends_at']);
             $table->index(['event_type_id', 'starts_at']);
             $table->index(['status', 'starts_at']);

@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RecordsActivity;
 use Illuminate\Database\Eloquent\Model;
 
 class AppSetting extends Model
 {
+    use RecordsActivity;
+
     public const SUPPORTED_LOCALES = ['uk', 'en'];
 
     protected $table = 'app_settings';

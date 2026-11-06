@@ -3,7 +3,7 @@
 namespace App\Services;
 
 /**
- * Підсумок роботи AutoScheduler за один запуск — для показу менеджеру перед затвердженням.
+ * Summary of one AutoScheduler run, shown to the manager before approval.
  */
 class AutoScheduleResult
 {
@@ -41,8 +41,8 @@ class AutoScheduleResult
     }
 
     /**
-     * Livewire не вміє серіалізувати довільні об'єкти в публічних властивостях
-     * компонента — тому сторінка зберігає результат як масив, отриманий звідси.
+     * Livewire cannot serialize arbitrary objects in public component
+     * properties, so the page stores the result as the array returned here.
      */
     public function toArray(): array
     {

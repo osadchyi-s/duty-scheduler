@@ -2,9 +2,11 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Actions\DeleteAllowedBulkAction;
 use App\Filament\Resources\EventTypeResource\Pages;
 use App\Models\EventType;
 use App\Models\User;
+use App\Support\TimeUnit;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
@@ -83,30 +85,32 @@ class EventTypeResource extends Resource
             Forms\Components\Section::make(__('Rest period rules'))
                 ->columns(2)
                 ->schema([
-                    Forms\Components\TextInput::make('min_rest_hours')
-                        ->label(__('Required minimum rest (hours)'))
-                        ->numeric()->default(0)->minValue(0)
+                    self::hoursInput('min_rest_hours')
+                        ->label(TimeUnit::usesDays() ? __('Required minimum rest (days)') : __('Required minimum rest (hours)'))
+                        ->default(0)->minValue(0)
                         ->helperText(__('Hard constraint — assignments below this threshold are forbidden')),
-                    Forms\Components\TextInput::make('preferred_rest_hours')
-                        ->label(__('Preferred rest (hours)'))
-                        ->numeric()->default(0)->minValue(0)
+                    self::hoursInput('preferred_rest_hours')
+                        ->label(TimeUnit::usesDays() ? __('Preferred rest (days)') : __('Preferred rest (hours)'))
+                        ->default(0)->minValue(0)
                         ->helperText(__('Soft constraint — assignments below this threshold trigger a warning ⚠️')),
                 ]),
 
             Forms\Components\Section::make(__('Schedule auto-generation'))
                 ->description(__('Used by the “Schedule auto-generation” page for automatic assignment'))
-                ->columns(3)
+                ->columns(TimeUnit::usesDays() ? 2 : 3)
                 ->schema([
                     Forms\Components\Toggle::make('is_schedulable')
                         ->label(__('Include in auto-generation'))
                         ->helperText(__('Enabled by default for event types with a minimum capacity greater than zero'))
                         ->default(false),
+                    // In "days" mode every event starts at 00:00, so the start time is not editable.
                     Forms\Components\TimePicker::make('default_start_time')
                         ->label(__('Default start time'))
-                        ->seconds(false),
-                    Forms\Components\TextInput::make('default_duration_hours')
-                        ->label(__('Shift duration (hours)'))
-                        ->numeric()->minValue(1)->maxValue(72),
+                        ->seconds(false)
+                        ->visible(! TimeUnit::usesDays()),
+                    self::hoursInput('default_duration_hours')
+                        ->label(TimeUnit::usesDays() ? __('Shift duration (days)') : __('Shift duration (hours)'))
+                        ->minValue(1)->maxValue(TimeUnit::toDisplay(72)),
                 ]),
 
             Forms\Components\Section::make(__('Employee permissions'))
@@ -131,6 +135,17 @@ class EventTypeResource extends Resource
         ]);
     }
 
+    /**
+     * Numeric input for a column stored in hours but edited in the interface unit.
+     */
+    protected static function hoursInput(string $name): Forms\Components\TextInput
+    {
+        return Forms\Components\TextInput::make($name)
+            ->integer()
+            ->formatStateUsing(fn ($state) => TimeUnit::toDisplay($state))
+            ->dehydrateStateUsing(fn ($state) => TimeUnit::toHours($state));
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -141,8 +156,12 @@ class EventTypeResource extends Resource
                 Tables\Columns\IconColumn::make('is_blocking')->label(__('Blocking'))->boolean(),
                 Tables\Columns\TextColumn::make('min_capacity')->label(__('Min. people')),
                 Tables\Columns\TextColumn::make('max_capacity')->label(__('Max. people'))->placeholder('∞'),
-                Tables\Columns\TextColumn::make('min_rest_hours')->label(__('Minimum rest, hours')),
-                Tables\Columns\TextColumn::make('preferred_rest_hours')->label(__('Preferred rest, hours')),
+                Tables\Columns\TextColumn::make('min_rest_hours')
+                    ->label(TimeUnit::usesDays() ? __('Minimum rest, days') : __('Minimum rest, hours'))
+                    ->formatStateUsing(fn ($state) => TimeUnit::toDisplay($state)),
+                Tables\Columns\TextColumn::make('preferred_rest_hours')
+                    ->label(TimeUnit::usesDays() ? __('Preferred rest, days') : __('Preferred rest, hours'))
+                    ->formatStateUsing(fn ($state) => TimeUnit::toDisplay($state)),
                 Tables\Columns\IconColumn::make('is_schedulable')->label(__('Auto-generation'))->boolean(),
                 Tables\Columns\IconColumn::make('is_work_time')->label(__('Working time'))->boolean(),
                 Tables\Columns\IconColumn::make('is_active')->label(__('Active'))->boolean(),
@@ -182,7 +201,7 @@ class EventTypeResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    DeleteAllowedBulkAction::make(),
                 ]),
             ]);
     }

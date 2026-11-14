@@ -51,7 +51,8 @@ final class Weekdays
 
     private static function day(int $isoDay): Carbon
     {
-        // Any Monday works; the date only selects the day of the week.
-        return Carbon::create(2024, 1, 1)->addDays($isoDay - 1);
+        // Any Monday works; the date only selects the day of the week. The explicit locale is
+        // needed: without it Carbon takes full English day names from the fallback locale (uk).
+        return Carbon::create(2024, 1, 1)->addDays($isoDay - 1)->locale(app()->getLocale());
     }
 }

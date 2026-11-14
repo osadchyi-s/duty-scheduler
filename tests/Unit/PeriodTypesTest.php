@@ -55,6 +55,15 @@ it('normalizes the days-of-week filter, all seven days meaning every day', funct
         ->and(Weekdays::normalize(null))->toBe([]);
 });
 
+it('names the days of the week in the current locale', function () {
+    app()->setLocale('en');
+    expect(Weekdays::options()[1])->toBe('Monday')
+        ->and(Weekdays::shortNames([6, 7]))->toBe('Sat, Sun');
+
+    app()->setLocale('uk');
+    expect(Weekdays::options()[1])->toBe('понеділок');
+});
+
 it('limits the windows of any period type to the selected days of the week', function () {
     $period = new Period(['type' => PeriodTypes::ROLLING, 'params' => ['length_days' => 7, 'weekdays' => [6, 7]]]);
 

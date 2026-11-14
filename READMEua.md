@@ -3,6 +3,19 @@
 Модуль графіків чергувань, обліку відсутностей та кадрового планування.
 Laravel 12 + Filament v3 (TALL) + PostgreSQL 16 + Redis 7, у Docker.
 
+## Демо
+
+[![Демо: автогенерація чернетки, відпочинок при наведенні та швидке призначення](docs/media/demo-uk.gif)](docs/media/demo-uk.mp4)
+
+▶ [Повне демовідео (1:44, українські субтитри)](docs/media/demo-uk.mp4) ·
+[субтитри (.srt)](docs/media/demo.uk.srt) ·
+[англійська версія](README.md#demo)
+
+Відео показує основний сценарій роботи: матрицю чергувань, автогенерацію
+чернетки, відпочинок при наведенні, швидке призначення, приховування
+співробітників, колонку статистики, затвердження чернетки, період лише з
+вихідними, ліміти чергувань і звіти. Усі люди й дані в демо вигадані.
+
 ## Запуск (потрібен встановлений Docker + Docker Compose)
 
 ```bash
@@ -23,6 +36,14 @@ make init
 | Admin | admin@system.local | password |
 | Manager | manager@system.local | password |
 | User (6 співробітників) | employee1@system.local ... employee6@system.local | password |
+| User (20 робітників) | worker01@system.local ... worker20@system.local | password |
+
+Початкові дані англійською й збігаються з [демо](#демо): вигадані
+співробітники, сім типів подій, а `SchedulingRulesSeeder` додає приклади
+правил — періоди «Monthly weekends» (субота й неділя кожного календарного
+місяця) і «Long weekends» (четвер і неділя кожного календарного тижня), по
+ліміту чергувань на кожен і одну небажану пару (синергія −1). Повторний запуск
+сидерів ці правила не дублює.
 
 ## Структура проєкту
 
@@ -53,7 +74,7 @@ config/
 database/
   migrations/        event_types, user_events, user_event_type_permissions, synergies,
                      synergy_event_type, spatie-permission
-  seeders/           RoleAndPermissionSeeder, UserSeeder, EventTypeSeeder
+  seeders/           RoleAndPermissionSeeder, UserSeeder, EventTypeSeeder, SchedulingRulesSeeder
 resources/views/filament/pages/
   duty-matrix.blade.php         ← сітка матриці, sticky-колонка, Alpine hover-підсвічування
   period-statistics.blade.php
@@ -158,6 +179,20 @@ Dockerfile, Makefile, docker/
   чергувань на співробітника за календарний тиждень, календарний місяць,
   фіксований або повторюваний період — як жорсткий або м’який ліміт.
 
+![Матриця чергувань з автоматично згенерованою чернеткою та колонкою статистики](docs/media/screenshots/uk/matrix-draft.png)
+
+Наведення на подію показує обов’язковий (червоний) і бажаний (жовтий)
+відпочинок; клік по клітинці відкриває швидке призначення, яке одразу
+перевіряє правила:
+
+![Відпочинок при наведенні](docs/media/screenshots/uk/rest-zones.png)
+
+![Швидке призначення події](docs/media/screenshots/uk/assign-event.png)
+
+Звіти показують навантаження за типами подій і кадровий дефіцит:
+
+![Звіти](docs/media/screenshots/uk/reports.png)
+
 ## Синергія
 
 У таблиці синергій кожен запис описує **неупорядковану пару** співробітників:
@@ -224,6 +259,8 @@ Dockerfile, Makefile, docker/
 колишнім статусом `draft` у чернетку «Перенесені чернетки» їхнього місяця.
 Статистика будується лише за затвердженим графіком.
 
+![Автогенерація в нову чернетку](docs/media/screenshots/uk/auto-generation.png)
+
 Типи подій і співробітників, у яких є події, видалити не можна —
 деактивуйте їх, щоб зберегти історію графіка.
 
@@ -273,6 +310,10 @@ Dockerfile, Makefile, docker/
 призначення, і в автогенерації. Матриця також позначає ⚠️ наявні події, що
 перевищують ліміт, зокрема створені до появи ліміту; причина видна в
 підказці.
+
+![Календарний місяць, у якому враховуються лише вихідні](docs/media/screenshots/uk/period-weekdays.png)
+
+![Ліміти чергувань](docs/media/screenshots/uk/duty-limits.png)
 
 Нові типи періодів додаються реалізацією `App\Periods\PeriodType` і
 реєстрацією класу в `App\Periods\PeriodTypes`; міграція для цього не

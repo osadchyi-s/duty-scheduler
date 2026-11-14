@@ -14,9 +14,9 @@ class UserSeeder extends Seeder
         $admin = User::firstOrCreate(
             ['email' => 'admin@system.local'],
             [
-                'name' => 'Головний Адміністратор',
+                'name' => 'Adam Walker',
                 'password' => Hash::make('password'),
-                'position' => 'Системний адміністратор',
+                'position' => 'System administrator',
                 'is_active' => true,
             ]
         );
@@ -25,21 +25,21 @@ class UserSeeder extends Seeder
         $manager = User::firstOrCreate(
             ['email' => 'manager@system.local'],
             [
-                'name' => 'Олена Менеджерова',
+                'name' => 'Emily Carter',
                 'password' => Hash::make('password'),
-                'position' => 'Менеджер з планування',
+                'position' => 'Planning manager',
                 'is_active' => true,
             ]
         );
         $manager->syncRoles(['Manager']);
 
         $employeeNames = [
-            'Іванов Іван Володимирович',
-            'Петров Петро Сергійович',
-            'Сидоренко Сидір Олексійович',
-            'Коваленко Марія Петрівна',
-            'Шевченко Тарас Григорович',
-            'Бондаренко Ольга Іванівна',
+            'James Miller',
+            'Peter Wilson',
+            'Samuel Reed',
+            'Mary Collins',
+            'Thomas Grant',
+            'Olivia Bennett',
         ];
 
         $allEventTypes = EventType::all();
@@ -53,7 +53,7 @@ class UserSeeder extends Seeder
                 [
                     'name' => $name,
                     'password' => Hash::make('password'),
-                    'position' => 'Співробітник',
+                    'position' => 'Engineer',
                     'is_active' => true,
                 ]
             );
@@ -64,29 +64,29 @@ class UserSeeder extends Seeder
         }
 
         $fullAccessWorkers = [
-            'worker01@system.local' => 'Андрійчук Олексій Миколайович',
-            'worker02@system.local' => 'Гриценко Наталія Сергіївна',
-            'worker03@system.local' => 'Лисенко Дмитро Володимирович',
-            'worker04@system.local' => 'Морозенко Ірина Олегівна',
-            'worker05@system.local' => 'Савченко Віталій Іванович',
-            'worker06@system.local' => 'Деревянко Анна Павлівна',
-            'worker07@system.local' => 'Тищенко Богдан Олександрович',
-            'worker08@system.local' => 'Клименко Юлія Василівна',
-            'worker09@system.local' => 'Федоренко Максим Андрійович',
-            'worker10@system.local' => 'Кравчук Софія Дмитрівна',
-            'worker11@system.local' => 'Панченко Артем Сергійович',
-            'worker12@system.local' => 'Зубенко Валерія Віталіївна',
-            'worker13@system.local' => 'Нечипоренко Роман Олександрович',
-            'worker14@system.local' => 'Романчук Оксана Михайлівна',
-            'worker15@system.local' => 'Гордієнко Денис Ігорович',
+            'worker01@system.local' => 'Alex Turner',
+            'worker02@system.local' => 'Natalie Brooks',
+            'worker03@system.local' => 'Daniel Hughes',
+            'worker04@system.local' => 'Irene Foster',
+            'worker05@system.local' => 'Victor Hayes',
+            'worker06@system.local' => 'Anna Parker',
+            'worker07@system.local' => 'Brandon Cole',
+            'worker08@system.local' => 'Julia Morris',
+            'worker09@system.local' => 'Max Fisher',
+            'worker10@system.local' => 'Sophia King',
+            'worker11@system.local' => 'Arthur Price',
+            'worker12@system.local' => 'Valerie Ward',
+            'worker13@system.local' => 'Roman Ellis',
+            'worker14@system.local' => 'Oksana Gray',
+            'worker15@system.local' => 'Dennis Lane',
         ];
 
         $restrictedWorkers = [
-            'worker16@system.local' => 'Білоус Марина Юріївна',
-            'worker17@system.local' => 'Костенко Ігор Петрович',
-            'worker18@system.local' => 'Лавренко Катерина Андріївна',
-            'worker19@system.local' => 'Павленко Євгеній Михайлович',
-            'worker20@system.local' => 'Тарасенко Людмила Вікторівна',
+            'worker16@system.local' => 'Marina Shaw',
+            'worker17@system.local' => 'Igor Black',
+            'worker18@system.local' => 'Kate Lawson',
+            'worker19@system.local' => 'Eugene Palmer',
+            'worker20@system.local' => 'Lucy Tanner',
         ];
 
         foreach ($fullAccessWorkers as $email => $name) {
@@ -95,7 +95,7 @@ class UserSeeder extends Seeder
                 [
                     'name' => $name,
                     'password' => Hash::make('password'),
-                    'position' => 'Робітник',
+                    'position' => 'Operator',
                     'is_active' => true,
                 ]
             );
@@ -109,7 +109,7 @@ class UserSeeder extends Seeder
                 [
                     'name' => $name,
                     'password' => Hash::make('password'),
-                    'position' => 'Робітник',
+                    'position' => 'Operator',
                     'is_active' => true,
                 ]
             );

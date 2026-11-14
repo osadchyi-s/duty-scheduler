@@ -11,7 +11,7 @@ class EventTypeSeeder extends Seeder
     {
         $types = [
             [
-                'name' => 'Добове чергування MAIN',
+                'name' => '24h duty MAIN',
                 'code' => 'duty_24h',
                 'color_code' => '#3B82F6',
                 'is_blocking' => false,
@@ -27,7 +27,7 @@ class EventTypeSeeder extends Seeder
                 'sort_order' => 1,
             ],
             [
-                'name' => 'Добове чергування COPILOT',
+                'name' => '24h duty COPILOT',
                 'code' => 'duty_24h_copilot',
                 'color_code' => '#e05f9f',
                 'is_blocking' => false,
@@ -43,7 +43,7 @@ class EventTypeSeeder extends Seeder
                 'sort_order' => 1,
             ],
             [
-                'name' => 'Денна зміна SECOND',
+                'name' => 'Day shift SECOND',
                 'code' => 'day_shift_second',
                 'color_code' => '#10B981',
                 'is_blocking' => false,
@@ -59,7 +59,7 @@ class EventTypeSeeder extends Seeder
                 'sort_order' => 2,
             ],
             [
-                'name' => 'Денна зміна FIRST',
+                'name' => 'Day shift FIRST',
                 'code' => 'day_shift',
                 'color_code' => '#8936a8',
                 'is_blocking' => false,
@@ -75,7 +75,7 @@ class EventTypeSeeder extends Seeder
                 'sort_order' => 2,
             ],
             [
-                'name' => 'Відпустка',
+                'name' => 'Vacation',
                 'code' => 'vacation',
                 'color_code' => '#F59E0B',
                 'is_blocking' => true,
@@ -91,7 +91,7 @@ class EventTypeSeeder extends Seeder
                 'sort_order' => 3,
             ],
             [
-                'name' => 'Лікарняне',
+                'name' => 'Sick leave',
                 'code' => 'sick_leave',
                 'color_code' => '#EF4444',
                 'is_blocking' => true,
@@ -107,7 +107,7 @@ class EventTypeSeeder extends Seeder
                 'sort_order' => 4,
             ],
             [
-                'name' => 'Відрядження',
+                'name' => 'Business trip',
                 'code' => 'business_trip',
                 'color_code' => '#8B5CF6',
                 'is_blocking' => true,

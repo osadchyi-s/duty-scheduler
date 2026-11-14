@@ -4,6 +4,19 @@ A duty scheduling, absence tracking, and workforce planning application.
 Built with Laravel 12, Filament v3 (TALL), PostgreSQL 16, and Redis 7, and
 configured to run with Docker.
 
+## Demo
+
+[![Demo: an auto-generated draft, rest periods on hover and a quick assignment](docs/media/demo-en.gif)](docs/media/demo-en.mp4)
+
+▶ [Full demo video (1:50, English subtitles)](docs/media/demo-en.mp4) ·
+[subtitles (.srt)](docs/media/demo.en.srt) ·
+[Ukrainian version](READMEua.md#демо)
+
+The video walks through the main workflow: the duty matrix, auto-generation of
+a draft, rest periods on hover, quick assignment, hiding employees, the
+statistics column, approving the draft, a period limited to weekends, duty
+limits and reports. All people and data in the demo are fictional.
+
 ## Getting started
 
 Docker and Docker Compose must be installed.
@@ -28,6 +41,14 @@ The `UserSeeder` creates these accounts:
 | Admin | admin@system.local | password |
 | Manager | manager@system.local | password |
 | User (6 employees) | employee1@system.local ... employee6@system.local | password |
+| User (20 workers) | worker01@system.local ... worker20@system.local | password |
+
+The seeded data is in English and matches the [demo](#demo): fictional
+employees, seven event types, and `SchedulingRulesSeeder` adds example rules —
+the periods "Monthly weekends" (Saturday and Sunday of each calendar month) and
+"Long weekends" (Thursday and Sunday of each calendar week), a duty limit on
+each, and one unwanted pairing (synergy −1). Re-running the seeders does not
+duplicate these rules.
 
 ## Project structure
 
@@ -60,7 +81,7 @@ config/
   scheduling.php     Interface time unit (days or hours)
 database/
   migrations/        Events, permissions, synergies, and application settings
-  seeders/           Roles, users, and event types
+  seeders/           Roles, users, event types, and example scheduling rules
 lang/
   en.json            English source strings
   uk.json            Ukrainian translations
@@ -161,6 +182,19 @@ the matrix.
   within a calendar week, a calendar month, a fixed period, or a recurring
   period, as a hard or soft limit.
 
+![The duty matrix with an auto-generated draft and the statistics column](docs/media/screenshots/en/matrix-draft.png)
+
+Hovering an event shows its required (red) and preferred (yellow) rest days;
+clicking a cell opens the quick assignment, which checks the rules right away:
+
+![Rest periods on hover](docs/media/screenshots/en/rest-zones.png)
+
+![Quick event assignment](docs/media/screenshots/en/assign-event.png)
+
+Period reports show workload by event type and staffing deficits:
+
+![Period reports](docs/media/screenshots/en/reports.png)
+
 ## Employee synergy
 
 Each synergy record represents an **unordered employee pair**. The score is
@@ -222,6 +256,8 @@ Drafts do not expire. The `2026_10_31_000002_move_draft_events_into_schedule_dra
 migration moves events with the former `draft` status into a "Migrated drafts"
 draft of their month. Statistics are based on the approved schedule only.
 
+![Auto-generation into a new draft](docs/media/screenshots/en/auto-generation.png)
+
 Event types and employees that have events cannot be deleted; deactivate them
 instead, so the schedule history is preserved.
 
@@ -268,6 +304,10 @@ Limits are checked by the Constraints Engine, so they apply both to manual
 assignment and to auto-generation. The matrix also marks existing events that
 exceed a limit with ⚠️, including events created before the limit; the reason
 is shown in the tooltip.
+
+![A calendar month period that counts only weekends](docs/media/screenshots/en/period-weekdays.png)
+
+![Duty limits](docs/media/screenshots/en/duty-limits.png)
 
 New period types are added by implementing `App\Periods\PeriodType` and
 registering the class in `App\Periods\PeriodTypes`; no migration is needed.

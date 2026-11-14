@@ -76,6 +76,10 @@
                 <input type="checkbox" wire:model.live="showHighlights.weekends" class="rounded">
                 {{ __('Weekends / holidays') }}
             </label>
+            <label class="flex items-center gap-2">
+                <input type="checkbox" wire:model.live="showStatsColumn" class="rounded">
+                {{ __('Statistics column') }}
+            </label>
         </div>
     </x-filament::dropdown>
 

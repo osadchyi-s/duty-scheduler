@@ -120,6 +120,8 @@ class EventTypeResource extends Resource
                         ->label(__('Employees with access'))
                         ->relationship('allowedUsers', 'name')
                         ->options(fn () => User::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
+                        ->searchable()
+                        ->bulkToggleable()
                         ->columns(2),
                 ]),
 

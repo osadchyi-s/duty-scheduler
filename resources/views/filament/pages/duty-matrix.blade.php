@@ -53,9 +53,23 @@
         .dm-table thead th.dm-col-num, .dm-table thead th.dm-col-name,
         .dm-foot td.dm-col-num, .dm-foot td.dm-col-name { z-index: 30; }
 
-        /* "Total / Statistics" column (hidden while $showStatsColumn is false). */
-        .dm-stats      { border-left: 1px solid rgb(229 231 235); }
-        .dark .dm-stats{ border-left-color: rgb(55 65 81); }
+        /* "Statistics" column: days per event type, pinned to the right edge while scrolling. */
+        .dm-stats      { position: sticky; right: 0; z-index: 10; padding: var(--dm-cell-pad) 4px; white-space: nowrap;
+                         border-left: 1px solid rgb(229 231 235); background-color: #fff; }
+        .dark .dm-stats{ border-left-color: rgb(55 65 81); background-color: rgb(17 24 39); }
+        .dm-table thead th.dm-stats, .dm-foot td.dm-stats { z-index: 30; }
+        .dm-stat-list  { display: flex; gap: 2px; }
+        .dm-stat       { display: inline-flex; justify-content: center; min-width: 1.6em; padding: 0 3px; border-radius: 3px;
+                         font-size: var(--dm-small-font); font-weight: 600; line-height: 1.5; color: #fff; }
+        /* Button that hides an employee row: shown on row hover, over the end of the name cell. */
+        .dm-hide-row   { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); display: flex; padding: 1px;
+                         border-radius: .25rem; opacity: 0; color: rgb(156 163 175); background-color: inherit; }
+        tr:hover .dm-hide-row { opacity: 1; }
+        .dm-hide-row:hover    { color: rgb(var(--primary-600)); }
+        .dm-show-rows  { display: inline-flex; align-items: center; gap: 2px; margin-left: .5rem; padding: 0 .3rem; border-radius: .25rem;
+                         font-weight: 500; color: rgb(var(--primary-600)); background-color: rgb(var(--primary-50)); }
+        .dark .dm-show-rows { color: rgb(var(--primary-400)); background-color: rgb(var(--primary-400) / .1); }
+        .dm-icon-xs    { width: .875rem; height: .875rem; }
         .dm-vline      { border-right: 1px solid rgb(243 244 246); } /* gray-100 */
         .dark .dm-vline{ border-right-color: rgb(31 41 55); }        /* gray-800 */
         .dm-vline-head      { border-right: 1px solid rgb(229 231 235); } /* gray-200 */
@@ -101,6 +115,12 @@
             {{-- Rest after the hovered event: [from, minUntil) is required rest, [minUntil, preferredUntil)
                  is preferred rest. Dates are Y-m-d strings, ends exclusive (see DutyMatrix::restZone()). --}}
             restZone: { userId: null, from: null, minUntil: null, preferredUntil: null },
+            {{-- Employees hidden for this page view only; a page reload shows them again. --}}
+            hiddenRows: [],
+            hideRow(userId) { if (! this.hiddenRows.includes(userId)) this.hiddenRows.push(userId); },
+            hiddenRowsCss() {
+                return this.hiddenRows.map((id) => `.dm-table tr[data-employee='${id}'] { display: none; }`).join('\n');
+            },
             setRest(userId, from, minUntil, preferredUntil) {
                 this.restZone = { userId: userId, from: from, minUntil: minUntil, preferredUntil: preferredUntil };
             },
@@ -147,9 +167,12 @@
     >
         {{-- Matrix. wire:ignore.self keeps the height set by fitHeight() across Livewire updates.
              min-width keeps horizontal scroll on narrow screens (~36px per day). --}}
+        {{-- Hidden rows are hidden by a generated stylesheet rather than x-show on the rows: Livewire
+             re-renders the rows on every update, and wire:ignore keeps this element untouched. --}}
+        <style wire:ignore x-text="hiddenRowsCss()"></style>
         <div x-ref="scroller" wire:ignore.self class="dm-scroller">
             <table class="dm-table"
-                   style="min-width: {{ (36 + 150 + ($showStatsColumn ? 150 : 0)) + count($this->days) * 36 }}px">
+                   style="min-width: {{ (36 + 150 + ($showStatsColumn ? 120 : 0)) + count($this->days) * 36 }}px">
                 <thead>
                     <tr>
                         <th class="dm-vline-head dm-col-num dm-th bg-gray-50 dark:bg-gray-800">
@@ -157,6 +180,13 @@
                         </th>
                         <th class="dm-vline-head dm-col-name dm-th bg-gray-50 dark:bg-gray-800 text-left">
                             {{ __('Employee') }}
+                            <span wire:ignore>
+                                <button type="button" class="dm-show-rows" x-show="hiddenRows.length > 0" x-cloak
+                                        x-on:click="hiddenRows = []" title="{{ __('Show hidden employees') }}">
+                                    <x-filament::icon icon="heroicon-m-eye" class="dm-icon-xs" />
+                                    {{ __('Show hidden') }} (<span x-text="hiddenRows.length"></span>)
+                                </button>
+                            </span>
                         </th>
                         @foreach($this->days as $day)
                             @php
@@ -175,8 +205,8 @@
                             </th>
                         @endforeach
                         @if($showStatsColumn)
-                            <th class="dm-th dm-stats" style="width: 150px;">
-                                {{ __('Total / Statistics') }}
+                            <th class="dm-th dm-stats" title="{{ __('Days of each event type in the month') }}">
+                                {{ __('Statistics') }}
                             </th>
                         @endif
                     </tr>
@@ -188,29 +218,8 @@
                     @foreach($this->employees as $employee)
                         @php
                             $eventsIndex = $this->eventsIndexFor($employee);
-                            $totalHours = 0;
-                            $typeCounts = [];
-                            $warningCount = 0;
-                            $seenEventIds = [];
-                            foreach ($eventsIndex as $dayEvents) {
-                                foreach ($dayEvents as $ev) {
-                                    if (isset($seenEventIds[$ev->id])) {
-                                        continue;
-                                    }
-
-                                    $seenEventIds[$ev->id] = true;
-
-                                    if ($ev->eventType->is_work_time) {
-                                        $totalHours += $ev->durationHours();
-                                    }
-                                    $typeCounts[$ev->eventType->code] = ($typeCounts[$ev->eventType->code] ?? 0) + 1;
-                                    if ($this->eventWarnings($ev) !== []) {
-                                        $warningCount++;
-                                    }
-                                }
-                            }
                         @endphp
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50" data-employee="{{ $employee->id }}">
                             <td class="dm-vline-head dm-col-num dm-td-name bg-white dark:bg-gray-900">
                                 {{ $loop->iteration }}
                             </td>
@@ -222,6 +231,10 @@
                                 @unless($employee->is_active)
                                     <span style="font-size: 9px; font-weight: 600; padding: 0 .3rem; border-radius: .25rem; color: rgb(107 114 128); background: rgb(229 231 235);">{{ __('Inactive') }}</span>
                                 @endunless
+                                <button type="button" class="dm-hide-row" x-on:click="hideRow({{ $employee->id }})"
+                                        title="{{ __('Hide the employee until the page is reloaded') }}" aria-label="{{ __('Hide employee') }}">
+                                    <x-filament::icon icon="heroicon-m-eye-slash" class="dm-icon-xs" />
+                                </button>
                             </td>
 
                             @foreach($this->rowCells($days, $eventsIndex) as $cell)
@@ -287,16 +300,13 @@
                             @endforeach
 
                             @if($showStatsColumn)
-                                <td class="dm-td-name dm-stats" style="font-size: 10px;">
-                                    <div>{{ \App\Support\TimeUnit::format(round($totalHours)) }}</div>
-                                    <div class="text-gray-400">
-                                        @foreach($typeCounts as $code => $count)
-                                            {{ $code }}: {{ $count }}@if(!$loop->last) | @endif
+                                <td class="dm-stats">
+                                    <div class="dm-stat-list">
+                                        @foreach($this->eventDaysByType($employee, $days) as $stat)
+                                            <span class="dm-stat" style="background-color: {{ $stat['type']->color_code }};"
+                                                  title="{{ $stat['type']->name }}: {{ $stat['days'] }}">{{ $stat['days'] }}</span>
                                         @endforeach
                                     </div>
-                                    @if($warningCount > 0)
-                                        <div style="color: rgb(217 119 6);">{{ __('⚠️ exceptions: :count', ['count' => $warningCount]) }}</div>
-                                    @endif
                                 </td>
                             @endif
                         </tr>

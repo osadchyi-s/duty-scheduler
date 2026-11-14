@@ -4,11 +4,12 @@ namespace App\Filament\Resources\RoleResource\Pages;
 
 use App\Filament\Concerns\LogsRelationChanges;
 use App\Filament\Resources\RoleResource;
+use App\Filament\Concerns\HasCreateAndCloseActions;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateRole extends CreateRecord
 {
-    use LogsRelationChanges;
+    use LogsRelationChanges, HasCreateAndCloseActions;
 
     protected static string $resource = RoleResource::class;
 

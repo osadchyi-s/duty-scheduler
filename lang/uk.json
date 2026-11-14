@@ -151,11 +151,9 @@
     "Dates with staffing deficits": "Дефіцитні дати",
     "Weekends / holidays": "Вихідні / свята",
     "Draft": "Чернетка",
-    "Total / Statistics": "Всього / Статистика",
     "Note: :note": "Примітка: :note",
     ":count day|:count days": ":count доба|:count доби|:count діб",
     ":count hour|:count hours": ":count година|:count години|:count годин",
-    "⚠️ exceptions: :count": "⚠️ винятків: :count",
     "Unassigned ⚠️": "Непризначено ⚠️",
     "Assignments created": "Створено призначень",
     "With warnings ⚠️": "З попередженнями ⚠️",
@@ -323,5 +321,14 @@
     "Red: auto-generation never assigns this pair on the same day; a manual assignment shows a warning.": "Червоний: автогенерація ніколи не ставить цю пару в один день; ручне призначення показує попередження.",
     "Days of the week": "Дні тижня",
     "Only duty days on the selected days of the week are counted. If none is selected, every day is counted.": "Враховуються лише дні чергувань у вибрані дні тижня. Якщо нічого не вибрано, враховуються всі дні.",
-    "only :days": "лише :days"
+    "only :days": "лише :days",
+    "Save and close": "Зберегти й закрити",
+    "Create and close": "Створити й закрити",
+    "Show hidden employees": "Показати прихованих співробітників",
+    "Show hidden": "Показати приховані",
+    "Hide the employee until the page is reloaded": "Приховати співробітника до перезавантаження сторінки",
+    "Hide employee": "Приховати співробітника",
+    "Days of each event type in the month": "Кількість днів кожного типу подій за місяць",
+    "Statistics": "Статистика",
+    "Statistics column": "Колонка статистики"
 }

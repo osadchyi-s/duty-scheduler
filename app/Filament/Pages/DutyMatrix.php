@@ -77,11 +77,8 @@ class DutyMatrix extends Page implements HasForms, HasActions
     /** Draft id the cached draft was resolved for; false when not resolved yet. */
     protected int|false|null $draftResolvedFor = false;
 
-    /**
-     * Temporarily hides the "Total / Statistics" column. The column markup is kept
-     * in the view and simply not rendered while this is false; flip to true to bring it back.
-     */
-    public bool $showStatsColumn = false;
+    /** "Statistics" column: days of each event type per employee in the month. */
+    public bool $showStatsColumn = true;
 
     public static function getNavigationLabel(): string
     {
@@ -583,6 +580,41 @@ class DutyMatrix extends Page implements HasForms, HasActions
         }
 
         return $index;
+    }
+
+    /**
+     * Days of each event type the employee has in the displayed month, for the statistics
+     * column, ordered like the event types. Days are counted as for duty limits
+     * (UserEvent::countedDaysFor): in hours mode a 24-hour shift counts for its start day.
+     *
+     * @param  Collection<int, Carbon>  $days
+     * @return array<int, array{type: EventType, days: int}>
+     */
+    public function eventDaysByType(User $user, Collection $days): array
+    {
+        $first = $days->first()->copy()->startOfDay();
+        $last = $days->last()->copy()->endOfDay();
+        $daysByType = [];
+        $types = [];
+
+        foreach ($user->events as $event) {
+            foreach (UserEvent::countedDaysFor($event->starts_at, $event->ends_at) as $day) {
+                if ($day->between($first, $last)) {
+                    // Keyed by date: two events of one type on the same day are one day.
+                    $daysByType[$event->event_type_id][$day->toDateString()] = true;
+                    $types[$event->event_type_id] = $event->eventType;
+                }
+            }
+        }
+
+        return collect($daysByType)
+            ->map(fn (array $dates, int $typeId): array => ['type' => $types[$typeId], 'days' => count($dates)])
+            ->sortBy([
+                fn (array $a, array $b): int => (int) $a['type']->sort_order <=> (int) $b['type']->sort_order,
+                fn (array $a, array $b): int => strcmp($a['type']->name, $b['type']->name),
+            ])
+            ->values()
+            ->all();
     }
 
     /**

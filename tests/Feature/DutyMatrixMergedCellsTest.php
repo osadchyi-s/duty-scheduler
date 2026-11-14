@@ -81,3 +81,27 @@ it('keeps the weekend lines on the edges of a merged cell', function () {
         ->and($page->weekendEdgeClasses(Carbon::parse('2026-11-05'), Carbon::parse('2026-11-08')))->toBe('dm-weekend-end')
         ->and($page->weekendEdgeClasses(Carbon::parse('2026-11-04')))->toBe('');
 });
+
+it('lets each employee row be hidden and shown again in the browser', function () {
+    $html = Livewire::test(DutyMatrix::class)->set('month', '2026-11')->html();
+
+    expect($html)->toContain('data-employee="'.$this->manager->id.'"')
+        ->and($html)->toContain('hideRow('.$this->manager->id.')')
+        ->and($html)->toContain('x-on:click="hiddenRows = []"');
+});
+
+it('shows the days of each event type in the month in the statistics column', function () {
+    // Vacation from 28.10 to 03.11: only 1-3 November count; two duties on 10 and 12 November.
+    mergedCellsEvent($this->manager, $this->vacation, '2026-10-28 00:00:00', '2026-11-04 00:00:00');
+    mergedCellsEvent($this->manager, $this->duty, '2026-11-10 00:00:00', '2026-11-11 00:00:00');
+    mergedCellsEvent($this->manager, $this->duty, '2026-11-12 00:00:00', '2026-11-13 00:00:00');
+
+    $page = Livewire::test(DutyMatrix::class)->set('month', '2026-11');
+    $html = $page->html();
+
+    expect($html)->toContain('title="Щорічна відпустка: 3">3</span>')
+        ->and($html)->toContain('title="Чергування: 2">2</span>');
+
+    $page->set('showStatsColumn', false);
+    expect($page->html())->not->toContain('class="dm-stats"');
+});

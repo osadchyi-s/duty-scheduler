@@ -119,6 +119,16 @@ the matrix.
   dropdowns, actions), 11px rows, and its own scroll area that fills the
   window with the dates pinned at the top and the "Unassigned" row at the
   bottom. The sidebar can be collapsed for more width.
+- In the matrix, a multi-day event is one strip with one label, and labels
+  that do not fit shrink and are then cut off. Weekends are separated by
+  white lines. The "Statistics" column (pinned to the right, toggled in the
+  highlights dropdown) shows how many days of each event type an employee has
+  in the month. An employee row can be hidden with the eye icon that appears on
+  hover; "Show hidden" in the employee column header brings all rows back, and
+  so does reloading the page (nothing is saved).
+- Edit pages have "Save" (stay on the page) and "Save and close" (back to the
+  list) above and below the form; create pages have "Create" (opens the new
+  record) and "Create and close".
 - Employees can be reordered by drag and drop on the employees page; the
   duty matrix (with a row number column and "Name (position)" in one line)
   and the export use the same order.

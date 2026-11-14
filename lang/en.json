@@ -151,11 +151,9 @@
     "Dates with staffing deficits": "Dates with staffing deficits",
     "Weekends / holidays": "Weekends / holidays",
     "Draft": "Draft",
-    "Total / Statistics": "Total / Statistics",
     "Note: :note": "Note: :note",
     ":count day|:count days": ":count day|:count days",
     ":count hour|:count hours": ":count hour|:count hours",
-    "⚠️ exceptions: :count": "⚠️ exceptions: :count",
     "Unassigned ⚠️": "Unassigned ⚠️",
     "Assignments created": "Assignments created",
     "With warnings ⚠️": "With warnings ⚠️",
@@ -323,5 +321,14 @@
     "Red: auto-generation never assigns this pair on the same day; a manual assignment shows a warning.": "Red: auto-generation never assigns this pair on the same day; a manual assignment shows a warning.",
     "Days of the week": "Days of the week",
     "Only duty days on the selected days of the week are counted. If none is selected, every day is counted.": "Only duty days on the selected days of the week are counted. If none is selected, every day is counted.",
-    "only :days": "only :days"
+    "only :days": "only :days",
+    "Save and close": "Save and close",
+    "Create and close": "Create and close",
+    "Show hidden employees": "Show hidden employees",
+    "Show hidden": "Show hidden",
+    "Hide the employee until the page is reloaded": "Hide the employee until the page is reloaded",
+    "Hide employee": "Hide employee",
+    "Days of each event type in the month": "Days of each event type in the month",
+    "Statistics": "Statistics",
+    "Statistics column": "Statistics column"
 }

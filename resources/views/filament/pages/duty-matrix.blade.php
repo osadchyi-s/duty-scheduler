@@ -18,7 +18,7 @@
 
         /* Matrix: small text and tight cells, so many employees fit on one screen. The sizes grow
            on wide monitors; adjust them here (laptops / >= 1600px / >= 2200px). */
-        .dm-table { --dm-font: 11px; --dm-event-font: 10px; --dm-small-font: 9px; --dm-cell-pad: 1px; --dm-row-height: 18px; }
+        .dm-table { --dm-event-min-font: 8px; --dm-font: 11px; --dm-event-font: 10px; --dm-small-font: 9px; --dm-cell-pad: 1px; --dm-row-height: 18px; }
         @media (min-width: 1600px) {
             .dm-table { --dm-font: 11.9px; --dm-event-font: 10.9px; --dm-small-font: 9.5px; --dm-cell-pad: 2px; --dm-row-height: 21px; }
         }
@@ -37,6 +37,9 @@
         .dm-dow        { display: block; font-size: var(--dm-small-font); font-weight: 400; color: rgb(156 163 175); }
         .dm-event      { position: relative; flex: 1 1 0; min-height: 0; display: flex; align-items: center; justify-content: center;
                          padding: 0 2px; overflow: hidden; font-size: var(--dm-event-font); line-height: 1.1; color: #fff; white-space: nowrap; }
+        /* The label shrinks down to --dm-event-min-font to fit its cell (fitLabels() below), and
+           only then is cut off with an ellipsis. */
+        .dm-event-label { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
         .dm-event-warn { position: absolute; top: 0; right: 1px; font-size: var(--dm-small-font); line-height: 1; }
         /* Cell borders (separate border model, so sticky cells keep their borders while scrolling). */
         .dm-table th, .dm-table td { border-bottom: 1px solid rgb(243 244 246); }
@@ -66,6 +69,11 @@
         .dark .dm-weekend-head { background-color: rgb(255 255 255 / .04); color: rgb(107 114 128); }
         .dm-weekend            { background-color: rgb(249 250 251); }                          /* gray-50 */
         .dark .dm-weekend      { background-color: rgb(255 255 255 / .03); }
+        /* White separators before Saturday and after Sunday, in both themes, so the weekend
+           columns stand apart. The .dm-table prefix beats ".dark .dm-vline", whose right border
+           they replace after Sunday. */
+        .dm-table .dm-weekend-start { border-left: 1px solid #fff; }
+        .dm-table .dm-weekend-end   { border-right: 1px solid #fff; }
         /* Rest zones on hover; defined after weekends so they win on weekend cells. */
         .dm-rest-min            { background-color: rgb(254 202 202); }                         /* red-200 */
         .dark .dm-rest-min      { background-color: rgb(153 27 27 / .55); }
@@ -110,10 +118,32 @@
             fitHeight() {
                 const top = this.$refs.scroller.getBoundingClientRect().top;
                 this.$refs.scroller.style.maxHeight = Math.max(240, window.innerHeight - top - 12) + 'px';
+            },
+            {{-- Event labels that do not fit their cell get a smaller font, down to --dm-event-min-font;
+                 what still does not fit is cut off by CSS. Text width grows linearly with the font
+                 size, so one measurement per label is enough. All resets, then all reads, then all
+                 writes: one layout pass instead of one per label. --}}
+            fitLabels() {
+                const labels = [...this.$refs.scroller.querySelectorAll('.dm-event-label')];
+                if (labels.length === 0) return;
+                labels.forEach((label) => label.style.fontSize = '');
+                const table = this.$refs.scroller.querySelector('.dm-table');
+                const minSize = parseFloat(getComputedStyle(table).getPropertyValue('--dm-event-min-font')) || 8;
+                const baseSize = parseFloat(getComputedStyle(labels[0]).fontSize);
+                const sizes = labels.map((label) => label.scrollWidth > label.clientWidth
+                    ? Math.max(minSize, Math.floor(baseSize * label.clientWidth / label.scrollWidth * 2) / 2)
+                    : null);
+                labels.forEach((label, i) => { if (sizes[i] !== null) label.style.fontSize = sizes[i] + 'px'; });
+            },
+            fitAll() {
+                this.fitHeight();
+                this.fitLabels();
             }
          }"
-         x-init="$nextTick(() => fitHeight()); Livewire.hook('commit', ({ succeed }) => succeed(() => $nextTick(() => fitHeight())))"
-         x-on:resize.window.debounce.100ms="fitHeight()"
+         x-init="$nextTick(() => fitAll());
+                 document.fonts?.ready.then(() => fitLabels());
+                 Livewire.hook('commit', ({ succeed }) => succeed(() => $nextTick(() => fitAll())))"
+         x-on:resize.window.debounce.100ms="fitAll()"
     >
         {{-- Matrix. wire:ignore.self keeps the height set by fitHeight() across Livewire updates.
              min-width keeps horizontal scroll on narrow screens (~36px per day). --}}
@@ -136,6 +166,7 @@
                             @endphp
                             <th class="dm-vline-head dm-th
                                        {{ $showHighlights['weekends'] && $isWeekend ? 'dm-weekend-head' : '' }}
+                                       {{ $this->weekendEdgeClasses($day) }}
                                        {{ $deficitTooltip !== '' ? 'dm-deficit-head' : '' }}
                                        {{ $this->isPastDay($day) ? 'dm-past-head' : '' }}"
                                 @if($headTooltip !== '') title="{{ $headTooltip }}" @endif
@@ -151,6 +182,9 @@
                     </tr>
                 </thead>
                 <tbody>
+                    @php
+                        $days = $this->days;
+                    @endphp
                     @foreach($this->employees as $employee)
                         @php
                             $eventsIndex = $this->eventsIndexFor($employee);
@@ -190,19 +224,26 @@
                                 @endunless
                             </td>
 
-                            @foreach($this->days as $day)
+                            @foreach($this->rowCells($days, $eventsIndex) as $cell)
                                 @php
+                                    // A cell covers one day, or several days of one multi-day event.
+                                    $day = $cell['days'][0];
+                                    $lastDay = end($cell['days']);
+                                    $span = count($cell['days']);
                                     $dateKey = $day->format('Y-m-d');
-                                    $dayEvents = $eventsIndex[$dateKey] ?? [];
-                                    $isWeekend = $day->isWeekend();
+                                    $dayEvents = $cell['events'];
                                 @endphp
                                 <td class="dm-vline dm-cell
-                                           {{ $showHighlights['weekends'] && $isWeekend ? 'dm-weekend' : '' }}
-                                           {{ $this->isPastDay($day) ? 'dm-past' : '' }}"
+                                           {{ $showHighlights['weekends'] && $day->isWeekend() && $lastDay->isWeekend() ? 'dm-weekend' : '' }}
+                                           {{ $this->weekendEdgeClasses($day, $lastDay) }}
+                                           {{ $this->isPastDay($lastDay) ? 'dm-past' : '' }}"
+                                    @if($span > 1) colspan="{{ $span }}" @else
+                                    {{-- A merged cell is covered by its event, so a rest zone would not show there. --}}
                                     :class="{
                                         'dm-rest-min': {{ $showHighlights['rest_zones'] ? 'true' : 'false' }} && inMinZone({{ $employee->id }}, '{{ $dateKey }}'),
                                         'dm-rest-preferred': {{ $showHighlights['rest_zones'] ? 'true' : 'false' }} && inPreferredZone({{ $employee->id }}, '{{ $dateKey }}')
                                     }"
+                                    @endif
                                 >
                                     <div class="dm-cell-fill">
                                     @if(count($dayEvents))
@@ -227,7 +268,7 @@
                                                 style="background-color: {{ $event->eventType->color_code }};{{ $employee->is_active ? '' : ' opacity: .45;' }}"
                                                 title="{{ $eventTitle }}"
                                             >
-                                                {{ \Illuminate\Support\Str::limit($event->eventType->name, 6, '') }}
+                                                <span class="dm-event-label">{{ $event->eventType->name }}</span>
                                                 @if($showHighlights['warnings'] && $eventWarnings !== [])
                                                     <span class="dm-event-warn">⚠️</span>
                                                 @endif
@@ -273,6 +314,7 @@
                             @endphp
                             <td class="dm-vline dm-th bg-gray-50 dark:bg-gray-800
                                 {{ $showHighlights['capacity'] && $deficit ? 'dm-deficit' : '' }}
+                                {{ $this->weekendEdgeClasses($day) }}
                                 {{ $this->isPastDay($day) ? 'dm-past-head' : '' }}"
                                 @if($deficit) title="{{ $this->staffingDeficitTooltip($day) }}" @endif
                             >

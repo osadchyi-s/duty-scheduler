@@ -585,6 +585,61 @@ class DutyMatrix extends Page implements HasForms, HasActions
         return $index;
     }
 
+    /**
+     * Day cells of one employee row. Consecutive days covered by the same event, with no other
+     * events on them, become one cell (rendered with colspan), so a multi-day event reads as a
+     * single strip with one label. A day with several events breaks the strip.
+     *
+     * @param  Collection<int, Carbon>  $days
+     * @param  array<string, array<int, UserEvent>>  $eventsIndex
+     * @return array<int, array{days: array<int, Carbon>, events: array<int, UserEvent>}>
+     */
+    public function rowCells(Collection $days, array $eventsIndex): array
+    {
+        $cells = [];
+
+        foreach ($days as $day) {
+            $events = $eventsIndex[$day->format('Y-m-d')] ?? [];
+            $last = array_key_last($cells);
+
+            if (count($events) === 1 && $last !== null
+                && count($cells[$last]['events']) === 1
+                && $cells[$last]['events'][0]->id === $events[0]->id) {
+                $cells[$last]['days'][] = $day;
+
+                continue;
+            }
+
+            $cells[] = ['days' => [$day], 'events' => $events];
+        }
+
+        return $cells;
+    }
+
+    /**
+     * Classes for the white separators around weekends: before the first weekend day and after
+     * the last one. $last is the last day of a merged cell.
+     */
+    public function weekendEdgeClasses(Carbon $first, ?Carbon $last = null): string
+    {
+        if (! $this->showHighlights['weekends']) {
+            return '';
+        }
+
+        $last ??= $first;
+        $classes = [];
+
+        if ($first->isWeekend() && ! $first->copy()->subDay()->isWeekend()) {
+            $classes[] = 'dm-weekend-start';
+        }
+
+        if ($last->isWeekend() && ! $last->copy()->addDay()->isWeekend()) {
+            $classes[] = 'dm-weekend-end';
+        }
+
+        return implode(' ', $classes);
+    }
+
     /** @var array<int, array<int, string>>|null Duty limit violations of the displayed events, per request. */
     protected ?array $limitViolations = null;
 

@@ -9,7 +9,7 @@ class UserEventPolicy
 {
     public function viewAny(User $user): bool
     {
-        return true; // усі ролі бачать матрицю (User — лише свій графік/публічну матрицю)
+        return true; // all roles see the matrix (User: only their own schedule / the public matrix)
     }
 
     public function view(User $user, UserEvent $event): bool

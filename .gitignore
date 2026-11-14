@@ -17,3 +17,8 @@
 Homestead.json
 Homestead.yaml
 .DS_Store
+
+# Deployment secrets and database backups (see deploy/*.env.example)
+/deploy/*.env
+/deploy/backups/
+/deploy/.*.tag

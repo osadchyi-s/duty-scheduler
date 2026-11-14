@@ -23,7 +23,8 @@ class UserPolicy
 
     public function delete(User $user, User $model): bool
     {
-        // Лише Admin і не сам себе.
-        return $user->hasRole('Admin') && $user->id !== $model->id;
+        // Admin only, and not themselves. Employees with events keep their history
+        // and are deactivated instead.
+        return $user->hasRole('Admin') && $user->id !== $model->id && ! $model->events()->exists();
     }
 }

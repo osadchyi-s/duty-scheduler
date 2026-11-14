@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\AppSetting as AppSettingModel;
+use Filament\Actions\Action;
 use Filament\Forms;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -41,6 +42,19 @@ class AppSettings extends Page implements HasForms
     public function getTitle(): string
     {
         return __('Application settings');
+    }
+
+    /**
+     * The save button is shown both above the form (here) and below it (in the view).
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('save')
+                ->label(__('Save settings'))
+                ->icon('heroicon-o-check')
+                ->action(fn () => $this->save()),
+        ];
     }
 
     public function mount(): void

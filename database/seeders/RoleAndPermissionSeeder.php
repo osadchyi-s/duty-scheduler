@@ -10,28 +10,28 @@ class RoleAndPermissionSeeder extends Seeder
 {
     public function run(): void
     {
-        // Атомарні права системи.
+        // Atomic system permissions.
         $permissions = [
-            // Матриця чергувань
+            // Duty matrix
             'matrix.view',
-            'matrix.assign',          // створювати/редагувати призначення
-            'matrix.approve',         // затверджувати draft -> approved
+            'matrix.assign',          // create/edit assignments
+            'matrix.approve',         // approve draft -> approved
             'matrix.delete',
-            // Типи подій
+            // Event types
             'event_types.view',
             'event_types.manage',
-            // Користувачі
+            // Users
             'users.view',
             'users.create',
             'users.update',
             'users.delete',
-            // Ролі та права (виключно Admin)
+            // Roles and permissions (Admin only)
             'roles.view',
             'roles.manage',
-            // Звіти та експорт
+            // Reports and export
             'reports.view',
             'reports.export',
-            // Системні сторінки (виключно Admin)
+            // System pages (Admin only)
             'system.logs',
             'system.settings',
             'system.queues',

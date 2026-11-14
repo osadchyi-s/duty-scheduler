@@ -3,7 +3,10 @@
 namespace App\Filament\Pages;
 
 use App\Models\EventType;
+use App\Models\ScheduleDraft;
 use App\Services\AutoScheduler;
+use App\Services\ScheduleDraftService;
+use App\Support\TimeUnit;
 use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -11,11 +14,13 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Автоматичний розподіл чергувань наперед на заданий період (за замовчуванням — місяць).
- * Доступно Admin / Manager (створює лише `draft`-події — фінально затверджує менеджер у Матриці).
+ * Automatic duty assignment for a period within one month. Always generates
+ * into a schedule draft (a new or an existing one); a manager reviews the
+ * draft in the duty matrix and approves it. Available to Admin / Manager.
  */
 class AutoSchedule extends Page implements HasForms
 {
@@ -30,8 +35,8 @@ class AutoSchedule extends Page implements HasForms
     public ?array $data = [];
 
     /**
-     * Зберігаємо як звичайний масив (не об'єкт AutoScheduleResult) — Livewire
-     * серіалізує лише прості типи (масиви/скаляри) в публічних властивостях.
+     * Stored as a plain array (not an AutoScheduleResult object): Livewire
+     * serializes only simple types (arrays/scalars) in public properties.
      */
     public ?array $result = null;
 
@@ -57,10 +62,12 @@ class AutoSchedule extends Page implements HasForms
 
     public static function defaultFormData(?string $month = null): array
     {
-        $start = Carbon::createFromFormat('Y-m', $month ?? now()->format('Y-m'))->startOfMonth();
+        $start = Carbon::createFromFormat('!Y-m', $month ?? now()->format('Y-m'))->startOfMonth();
+        // For the current month, start from today rather than generating for days that have passed.
+        $from = today()->between($start, $start->copy()->endOfMonth()) ? today() : $start;
 
         return [
-            'from' => $start->format('Y-m-d'),
+            'from' => $from->format('Y-m-d'),
             'to' => $start->copy()->endOfMonth()->format('Y-m-d'),
             'event_type_ids' => EventType::where('min_capacity', '>', 0)
                 ->where('is_active', true)
@@ -68,23 +75,45 @@ class AutoSchedule extends Page implements HasForms
                 ->toArray(),
             'fill_to_max' => false,
             'existing_events' => AutoScheduler::EXISTING_FILL_MISSING,
+            'draft_id' => null,
         ];
     }
 
-    public static function formSchema(): array
+    /**
+     * @param  bool  $withDraftSelect  false when the target draft is defined by the caller (the matrix tab)
+     */
+    public static function formSchema(bool $withDraftSelect = true): array
     {
         return [
             Forms\Components\Section::make(__('Period'))
-                ->columns(2)
-                ->schema([
+                ->description(__('The period must lie within one month.'))
+                ->columns($withDraftSelect ? 3 : 2)
+                ->schema(array_filter([
                     Forms\Components\DatePicker::make('from')
                         ->label(__('From date'))
-                        ->required(),
+                        ->required()
+                        ->live(),
                     Forms\Components\DatePicker::make('to')
                         ->label(__('To date'))
                         ->required()
                         ->afterOrEqual('from'),
-                ]),
+                    Forms\Components\Placeholder::make('past_period_warning')
+                        ->hiddenLabel()
+                        ->columnSpanFull()
+                        ->content(fn (Forms\Get $get): HtmlString => new HtmlString('<span style="color: rgb(217 119 6); font-weight: 500;">'
+                            .e(__('⚠️ The period starts on a past date (:date). Assignments will also be generated for days that have already passed.', [
+                                'date' => Carbon::parse($get('from'))->format('d.m.Y'),
+                            ])).'</span>'))
+                        ->visible(fn (Forms\Get $get): bool => filled($get('from')) && Carbon::parse($get('from'))->lt(today())),
+                    $withDraftSelect
+                        ? Forms\Components\Select::make('draft_id')
+                            ->label(__('Draft'))
+                            ->placeholder(__('New draft'))
+                            ->options(fn (Forms\Get $get): array => filled($get('from'))
+                                ? ScheduleDraft::query()->forMonth(Carbon::parse($get('from')))->orderBy('id')->pluck('name', 'id')->all()
+                                : [])
+                        : null,
+                ])),
 
             Forms\Components\Section::make(__('Event types to assign'))
                 ->description(__('By default, event types requiring at least one person per day (min_capacity > 0) are selected'))
@@ -95,7 +124,7 @@ class AutoSchedule extends Page implements HasForms
                             ->orderBy('sort_order')
                             ->get()
                             ->mapWithKeys(fn (EventType $t) => [
-                                $t->id => $t->name.($t->default_duration_hours ? __('(:hours hours, min. :capacity people)', ['hours' => $t->default_duration_hours, 'capacity' => $t->min_capacity]) : __(' — duration is not set; this event type will be skipped')),
+                                $t->id => $t->name.($t->default_duration_hours ? __(' (:duration, min. :capacity people)', ['duration' => TimeUnit::format(TimeUnit::normalizeDurationHours($t->default_duration_hours)), 'capacity' => $t->min_capacity]) : __(' — duration is not set; this event type will be skipped')),
                             ]))
                         ->columns(2)
                         ->required(),
@@ -107,16 +136,14 @@ class AutoSchedule extends Page implements HasForms
                         ->label(__('What to do with existing events of the selected types in this period'))
                         ->options([
                             AutoScheduler::EXISTING_FILL_MISSING => __('Fill missing assignments only'),
-                            AutoScheduler::EXISTING_DELETE_DRAFTS => __('Delete drafts only and reassign'),
                             AutoScheduler::EXISTING_DELETE_ALL => __('Delete all assignments and reassign'),
                         ])
                         ->descriptions([
                             AutoScheduler::EXISTING_FILL_MISSING => __('Keep existing events and fill empty slots up to the selected capacity.'),
-                            AutoScheduler::EXISTING_DELETE_DRAFTS => __('Only drafts of the selected types are deleted. Approved events remain.'),
-                            AutoScheduler::EXISTING_DELETE_ALL => __('Draft and approved events of the selected types are deleted. Cancelled events are unchanged.'),
+                            AutoScheduler::EXISTING_DELETE_ALL => __('Events of the selected types in the draft and period are deleted and assigned again.'),
                         ])
                         ->default(AutoScheduler::EXISTING_FILL_MISSING)
-                        ->helperText(__('Warning: delete modes permanently delete events of the selected types that overlap this period.'))
+                        ->helperText(__('Only the draft changes. The approved schedule changes when the draft is approved.'))
                         ->required(),
                     Forms\Components\Toggle::make('fill_to_max')
                         ->label(__('Fill to maximum capacity (max_capacity)'))
@@ -133,13 +160,17 @@ class AutoSchedule extends Page implements HasForms
             ->statePath('data');
     }
 
-    public function generate(AutoScheduler $scheduler): void
+    public function generate(AutoScheduler $scheduler, ScheduleDraftService $drafts): void
     {
-        $this->result = self::generateResult($this->form->getState(), $scheduler);
+        $this->result = self::generateResult($this->form->getState(), $scheduler, $drafts);
         self::sendResultNotification($this->result);
     }
 
-    public static function generateResult(array $data, AutoScheduler $scheduler): array
+    /**
+     * Generates into the given draft, or into the draft selected in the form,
+     * or into a newly created draft of the period's month.
+     */
+    public static function generateResult(array $data, AutoScheduler $scheduler, ScheduleDraftService $drafts, ?ScheduleDraft $draft = null): array
     {
         if (empty($data['event_type_ids'])) {
             throw ValidationException::withMessages(['event_type_ids' => __('Select at least one event type.')]);
@@ -148,9 +179,19 @@ class AutoSchedule extends Page implements HasForms
         $from = Carbon::parse($data['from'])->startOfDay();
         $to = Carbon::parse($data['to'])->endOfDay();
 
-        if ($from->diffInDays($to) > 366) {
-            throw ValidationException::withMessages(['to' => __('The period cannot exceed 366 days.')]);
+        if ($from->format('Y-m') !== $to->format('Y-m')) {
+            throw ValidationException::withMessages(['to' => __('The period must lie within one month.')]);
         }
+
+        if ($draft === null && filled($data['draft_id'] ?? null)) {
+            $draft = ScheduleDraft::query()->forMonth($from)->findOrFail($data['draft_id']);
+        }
+
+        if ($draft !== null && $draft->month->format('Y-m') !== $from->format('Y-m')) {
+            throw ValidationException::withMessages(['from' => __('The period must lie within the draft month.')]);
+        }
+
+        $draft ??= $drafts->create($from, auth()->user());
 
         return $scheduler->generate(
             $from,
@@ -158,7 +199,12 @@ class AutoSchedule extends Page implements HasForms
             array_map('intval', $data['event_type_ids']),
             (bool) ($data['fill_to_max'] ?? false),
             $data['existing_events'] ?? AutoScheduler::EXISTING_FILL_MISSING,
-        )->toArray();
+            $draft,
+        )->toArray() + [
+            'draftId' => $draft->id,
+            'draftName' => $draft->name,
+            'matrixUrl' => DutyMatrix::getUrl(['month' => $from->format('Y-m'), 'draft' => $draft->id]),
+        ];
     }
 
     public static function sendResultNotification(array $result): void
@@ -170,6 +216,9 @@ class AutoSchedule extends Page implements HasForms
         ]);
         if ($result['deletedCount'] > 0) {
             $details .= ' '.__('Previous assignments deleted: :count.', ['count' => $result['deletedCount']]);
+        }
+        if (isset($result['draftName'])) {
+            $details = __('Draft: :name.', ['name' => $result['draftName']]).' '.$details;
         }
 
         if ($result['createdCount'] === 0 && $result['deficitCount'] === 0 && $result['deletedCount'] === 0) {

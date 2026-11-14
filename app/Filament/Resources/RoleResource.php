@@ -10,10 +10,10 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
 use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
+use App\Models\Role;
 
 /**
- * Матриця прав та управління ролями — доступно ВИКЛЮЧНО Admin (п.2.2 ТЗ).
+ * Permission matrix and role management, available ONLY to Admin (spec 2.2).
  */
 class RoleResource extends Resource
 {

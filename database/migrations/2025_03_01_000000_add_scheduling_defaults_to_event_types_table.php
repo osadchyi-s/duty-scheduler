@@ -5,8 +5,8 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Додаткові поля, необхідні для автогенерації графіка (AutoScheduler):
- * без них система не може розрахувати starts_at/ends_at для нової зміни.
+ * Additional fields required for schedule auto-generation (AutoScheduler):
+ * without them the system cannot calculate starts_at/ends_at for a new shift.
  */
 return new class extends Migration
 {
@@ -14,11 +14,11 @@ return new class extends Migration
     {
         Schema::table('event_types', function (Blueprint $table) {
             $table->time('default_start_time')->nullable()->after('preferred_rest_hours')
-                ->comment('Типовий час початку зміни для автогенерації, напр. 08:00:00');
+                ->comment('Default shift start time for auto-generation, e.g. 08:00:00');
             $table->unsignedSmallInteger('default_duration_hours')->nullable()->after('default_start_time')
-                ->comment('Типова тривалість зміни (год) для автогенерації, напр. 24');
+                ->comment('Default shift duration (hours) for auto-generation, e.g. 24');
             $table->boolean('is_schedulable')->default(false)->after('default_duration_hours')
-                ->comment('Чи бере участь тип події в автогенерації графіка (типово: min_capacity > 0)');
+                ->comment('Whether the event type takes part in auto-generation (default: min_capacity > 0)');
         });
     }
 

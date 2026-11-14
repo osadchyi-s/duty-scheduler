@@ -1,0 +1,47 @@
+1
+00:00:00,047 --> 00:00:04,583
+The duty matrix: employees × days of the month. Red dates are understaffed.
+
+2
+00:00:04,583 --> 00:00:15,982
+Auto-generation creates a new draft and fills it, respecting rest, duty limits and synergies.
+
+3
+00:00:15,982 --> 00:00:20,973
+The draft opens in its own tab. The approved schedule does not change.
+
+4
+00:00:20,973 --> 00:00:25,046
+Hover an event to see required (red) and preferred (yellow) rest days.
+
+5
+00:00:25,046 --> 00:00:37,593
+Click any cell to assign an event. The rules are checked right away.
+
+6
+00:00:37,593 --> 00:00:43,986
+Hide employees you do not need right now…
+
+7
+00:00:43,986 --> 00:00:47,754
+…and bring them all back with one click.
+
+8
+00:00:47,754 --> 00:00:54,364
+The Statistics column shows each employee’s days per event type.
+
+9
+00:00:54,364 --> 00:01:11,479
+Approving the draft makes it the schedule of the month.
+
+10
+00:01:11,479 --> 00:01:27,735
+A period can count only some days of the week, e.g. weekends of every month.
+
+11
+00:01:27,735 --> 00:01:33,857
+Duty limits cap duty days per period, as a hard rule or a warning.
+
+12
+00:01:33,857 --> 00:01:46,798
+Reports show workload distribution and staffing deficits.

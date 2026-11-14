@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\Period;
 use App\Periods\PeriodTypes;
+use App\Periods\Weekdays;
 use App\Periods\PeriodWindow;
 use Carbon\Carbon;
 
@@ -41,8 +43,31 @@ it('repeats a recurring period in both directions from the anchor', function () 
         ->and(windowKeys(PeriodTypes::RECURRING, ['anchor_date' => '2026-10-20', 'length_days' => 1, 'repeat_every_days' => 7], '2026-10-27'))->toBe(['27.10.2026–27.10.2026']);
 });
 
-it('only offers configurable period types for new periods', function () {
-    expect(array_keys(PeriodTypes::creatableOptions()))->toBe([PeriodTypes::FIXED, PeriodTypes::RECURRING, PeriodTypes::ROLLING]);
+it('offers every period type for new periods, calendar ones for a days-of-week filter', function () {
+    expect(array_keys(PeriodTypes::creatableOptions()))->toBe([
+        PeriodTypes::CALENDAR_WEEK, PeriodTypes::CALENDAR_MONTH, PeriodTypes::FIXED, PeriodTypes::RECURRING, PeriodTypes::ROLLING,
+    ]);
+});
+
+it('normalizes the days-of-week filter, all seven days meaning every day', function () {
+    expect(Weekdays::normalize(['7', 6, 6, 9]))->toBe([6, 7])
+        ->and(Weekdays::normalize([1, 2, 3, 4, 5, 6, 7]))->toBe([])
+        ->and(Weekdays::normalize(null))->toBe([]);
+});
+
+it('limits the windows of any period type to the selected days of the week', function () {
+    $period = new Period(['type' => PeriodTypes::ROLLING, 'params' => ['length_days' => 7, 'weekdays' => [6, 7]]]);
+
+    // Thursday 05.11.2026 is not a counted day: it belongs to no window.
+    expect($period->windowsForDays([Carbon::parse('2026-11-05')]))->toBe([]);
+
+    $windows = $period->windowsForDays([Carbon::parse('2026-11-07')]);
+    $window = reset($windows);
+
+    expect($windows)->toHaveCount(7)
+        ->and($window->contains(Carbon::parse('2026-11-07')))->toBeTrue()
+        ->and($window->contains(Carbon::parse('2026-11-06')))->toBeFalse()
+        ->and($window->label())->toBe('01.11.2026–07.11.2026 (сб, нд)');
 });
 
 it('puts a day into every rolling window that contains it', function () {

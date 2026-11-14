@@ -43,15 +43,13 @@ final class PeriodTypes
     }
 
     /**
-     * Types a user can create a period of (built-in types are excluded).
+     * Types a user can create a period of. Calendar types are offered too, so they can be
+     * combined with a days-of-week filter (the built-in calendar periods count every day).
      *
      * @return array<string, string>
      */
     public static function creatableOptions(): array
     {
-        return collect(self::all())
-            ->reject(fn (PeriodType $type): bool => $type->isSystem())
-            ->map(fn (PeriodType $type): string => $type->label())
-            ->all();
+        return array_map(fn (PeriodType $type): string => $type->label(), self::all());
     }
 }

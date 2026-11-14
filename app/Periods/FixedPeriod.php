@@ -15,11 +15,6 @@ class FixedPeriod implements PeriodType
         return __('Fixed period');
     }
 
-    public function isSystem(): bool
-    {
-        return false;
-    }
-
     public function windowsContaining(array $params, Carbon $day): array
     {
         if (empty($params['start_date']) || empty($params['end_date'])) {

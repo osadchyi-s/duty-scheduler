@@ -16,11 +16,6 @@ class RecurringPeriod implements PeriodType
         return __('Recurring period');
     }
 
-    public function isSystem(): bool
-    {
-        return false;
-    }
-
     public function windowsContaining(array $params, Carbon $day): array
     {
         $length = (int) ($params['length_days'] ?? 0);

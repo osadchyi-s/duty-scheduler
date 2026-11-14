@@ -226,13 +226,20 @@ administrators and managers:
   duty limit cannot be deleted.
 - **Periods** (**Scheduling rules → Periods**) — the built-in *calendar week*
   (Monday to Sunday) and *calendar month* are always available and read-only.
-  You can add a *fixed period* (a date range), a *recurring period* (fixed
+  You can add your own calendar week or month, a *fixed period* (a date range), a *recurring period* (fixed
   slots, for example 7 days every 14 days from a start date), or a *rolling
   period* (any N consecutive days: "at most 2 duties in any 7 days in a row").
   A recurring period of 7 days every 7 days is a fixed weekly grid, so a duty
   on the last day of one slot and on the first day of the next one fall into
   different slots; use a rolling period when the limit must hold for every
   stretch of days. A period used by a limit cannot be deleted.
+
+  Every period type, including a calendar week or month you create yourself,
+  can be limited to **days of the week**: only duty days on the selected days
+  are counted, and other days are not limited by it. For example, a calendar
+  month with Saturday and Sunday ("at most 2 weekend duties a month") or a
+  calendar week with Thursday and Sunday. No selection (or all seven days)
+  counts every day. The built-in calendar periods always count every day.
 - **Duty limits** (**Scheduling rules → Duty limits**) — a period, employee
   groups, the maximum number of duty days per employee, and what happens when
   it is exceeded: forbid the assignment or allow it with a warning. If no

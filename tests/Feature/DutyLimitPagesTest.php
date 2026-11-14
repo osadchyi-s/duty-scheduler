@@ -77,6 +77,34 @@ it('creates a recurring period with its settings', function () {
         ->and($period->is_system)->toBeFalse();
 });
 
+it('creates a calendar month period limited to weekends', function () {
+    $this->actingAs($this->manager);
+
+    Livewire::test(CreatePeriod::class)
+        ->fillForm(['name' => 'Вихідні місяця', 'type' => PeriodTypes::CALENDAR_MONTH])
+        ->fillForm(['params' => ['weekdays' => ['7', '6']]])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $period = Period::where('name', 'Вихідні місяця')->sole();
+
+    expect($period->params)->toBe(['weekdays' => [6, 7]])
+        ->and($period->describe())->toBe('З 1-го до останнього дня місяця; лише сб, нд');
+});
+
+it('keeps settings of a period type next to its days of the week', function () {
+    $this->actingAs($this->manager);
+
+    Livewire::test(CreatePeriod::class)
+        ->fillForm(['name' => 'Будь-які 7 днів', 'type' => PeriodTypes::ROLLING])
+        ->fillForm(['params' => ['length_days' => 7, 'weekdays' => [1, 2, 3, 4, 5, 6, 7]]])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    // All seven days are the same as no filter.
+    expect(Period::where('name', 'Будь-які 7 днів')->sole()->params)->toBe(['length_days' => 7]);
+});
+
 it('keeps built-in periods and periods in use read-only', function () {
     $this->actingAs($this->manager);
     $week = Period::where('type', PeriodTypes::CALENDAR_WEEK)->sole();

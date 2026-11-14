@@ -18,11 +18,6 @@ class RollingPeriod implements PeriodType
         return __('Rolling period');
     }
 
-    public function isSystem(): bool
-    {
-        return false;
-    }
-
     public function windowsContaining(array $params, Carbon $day): array
     {
         $length = (int) ($params['length_days'] ?? 0);

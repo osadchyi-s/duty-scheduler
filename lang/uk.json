@@ -320,5 +320,8 @@
     "More actions": "Інші дії",
     "Year": "Рік",
     "Unwanted pairing with :name (“:event”) on this day (synergy −1).": "Небажане поєднання з :name («:event») у цей день (синергія −1).",
-    "Red: auto-generation never assigns this pair on the same day; a manual assignment shows a warning.": "Червоний: автогенерація ніколи не ставить цю пару в один день; ручне призначення показує попередження."
+    "Red: auto-generation never assigns this pair on the same day; a manual assignment shows a warning.": "Червоний: автогенерація ніколи не ставить цю пару в один день; ручне призначення показує попередження.",
+    "Days of the week": "Дні тижня",
+    "Only duty days on the selected days of the week are counted. If none is selected, every day is counted.": "Враховуються лише дні чергувань у вибрані дні тижня. Якщо нічого не вибрано, враховуються всі дні.",
+    "only :days": "лише :days"
 }

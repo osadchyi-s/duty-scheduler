@@ -14,11 +14,6 @@ class CalendarWeekPeriod implements PeriodType
         return __('Calendar week');
     }
 
-    public function isSystem(): bool
-    {
-        return true;
-    }
-
     public function windowsContaining(array $params, Carbon $day): array
     {
         return [PeriodWindow::ofDays($day->copy()->startOfWeek(Carbon::MONDAY), 7)];

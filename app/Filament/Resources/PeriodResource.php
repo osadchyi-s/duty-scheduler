@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\PeriodResource\Pages;
 use App\Models\Period;
 use App\Periods\PeriodTypes;
+use App\Periods\Weekdays;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -70,6 +71,15 @@ class PeriodResource extends Resource
                 ->required()
                 ->live(),
             ...$typeFields,
+            // Shared by all period types; saved as params.weekdays (see Period::windowsForDays()).
+            Forms\Components\CheckboxList::make('params.weekdays')
+                ->label(__('Days of the week'))
+                ->helperText(__('Only duty days on the selected days of the week are counted. If none is selected, every day is counted.'))
+                ->options(Weekdays::options())
+                ->columns(7)
+                ->gridDirection('row')
+                ->columnSpanFull()
+                ->visible(fn (Forms\Get $get): bool => filled($get('type'))),
         ];
     }
 
@@ -86,7 +96,7 @@ class PeriodResource extends Resource
                     ->formatStateUsing(fn (string $state): string => PeriodTypes::get($state)->label()),
                 Tables\Columns\TextColumn::make('params')
                     ->label(__('Settings'))
-                    ->state(fn (Period $record): string => $record->periodType()->describe($record->params ?? [])),
+                    ->state(fn (Period $record): string => $record->describe()),
                 Tables\Columns\IconColumn::make('is_system')->label(__('Built-in'))->boolean(),
                 Tables\Columns\TextColumn::make('duty_limits_count')->label(__('Duty limits'))->counts('dutyLimits'),
             ])

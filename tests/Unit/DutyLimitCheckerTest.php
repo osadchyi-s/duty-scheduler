@@ -214,3 +214,34 @@ it('reports a rolling limit once per event although several windows are exceeded
     expect(array_keys($violations))->toEqualCanonicalizing($events->pluck('id')->all())
         ->and(collect($violations)->every(fn (array $reasons): bool => count($reasons) === 1))->toBeTrue();
 });
+
+it('counts only the selected days of the week in a weekdays-filtered period', function () {
+    // At most 1 weekend duty per calendar month (November 2026: 7-8.11, 14-15.11, ...).
+    $weekends = Period::create(['name' => 'Вихідні місяця', 'type' => PeriodTypes::CALENDAR_MONTH, 'params' => ['weekdays' => [6, 7]]]);
+    makeLimit($weekends, 1);
+    dutyOn($this->user, $this->dutyType, '2026-11-07');
+    dutyOn($this->user, $this->dutyType, '2026-11-09');
+    dutyOn($this->user, $this->dutyType, '2026-11-10');
+
+    $result = validateDay($this, '2026-11-15');
+
+    expect($result->isAllowed)->toBeFalse()
+        ->and($result->reason)->toContain('2 з 1')
+        ->and($result->reason)->toContain('01.11.2026–30.11.2026 (сб, нд)')
+        // Weekdays are not limited, and December has its own quota.
+        ->and(validateDay($this, '2026-11-12')->isAllowed)->toBeTrue()
+        ->and(validateDay($this, '2026-12-05')->isAllowed)->toBeTrue();
+});
+
+it('counts only the filtered days of a multi-day event', function () {
+    // Thursday and Sunday of each week, at most 1.
+    $period = Period::create(['name' => 'Чт і нд', 'type' => PeriodTypes::CALENDAR_WEEK, 'params' => ['weekdays' => [7, 4]]]);
+    makeLimit($period, 1);
+    // Wed 04.11 to Fri 06.11: only Thursday counts.
+    dutyOn($this->user, $this->dutyType, '2026-11-04', 3);
+
+    expect($period->weekdays())->toBe([4, 7])
+        ->and(app(DutyLimitChecker::class)->violations(UserEvent::with('eventType')->get()))->toBe([])
+        ->and(validateDay($this, '2026-11-07')->isAllowed)->toBeTrue()
+        ->and(validateDay($this, '2026-11-08')->isAllowed)->toBeFalse();
+});

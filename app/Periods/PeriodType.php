@@ -13,11 +13,6 @@ interface PeriodType
     public function label(): string;
 
     /**
-     * Built-in types exist as system periods and are not offered when creating a period.
-     */
-    public function isSystem(): bool;
-
-    /**
      * All windows of this period that contain the given day. Calendar and
      * fixed periods return at most one window; sliding windows may return several.
      *

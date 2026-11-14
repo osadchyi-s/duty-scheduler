@@ -11,11 +11,6 @@ class CalendarMonthPeriod implements PeriodType
         return __('Calendar month');
     }
 
-    public function isSystem(): bool
-    {
-        return true;
-    }
-
     public function windowsContaining(array $params, Carbon $day): array
     {
         $start = $day->copy()->startOfMonth();

@@ -1,0 +1,136 @@
+name: PR description
+
+# pull_request_target gives a write token also for PRs from forks. It is safe
+# here because the job never checks out or runs code from the PR - it only
+# reads PR metadata through the API.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-description-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  fill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fill auto sections
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pull_number = context.payload.pull_request.number;
+
+            // Re-read the PR: the payload body may be stale when several
+            // events arrive close together.
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number, per_page: 100,
+            });
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner, repo, pull_number, per_page: 100,
+            });
+
+            const esc = (s) => s.replace(/\|/g, '\\|');
+            const fileUrl = (f) => `${pr.html_url}/files#diff-${require('crypto').createHash('sha256').update(f.filename).digest('hex')}`;
+
+            // --- Changed files -------------------------------------------------
+            const statusIcon = {
+              added: '🟢 added', removed: '🔴 removed', modified: '🟡 modified',
+              renamed: '🔵 renamed', copied: '🔵 copied', changed: '🟡 changed',
+            };
+            const additions = files.reduce((n, f) => n + f.additions, 0);
+            const deletions = files.reduce((n, f) => n + f.deletions, 0);
+
+            const MAX_FILES = 300; // keeps the body well below GitHub's 65536-char limit
+            const rows = files.slice(0, MAX_FILES).map((f) => {
+              const name = f.status === 'renamed'
+                ? `\`${esc(f.previous_filename)}\` → \`${esc(f.filename)}\``
+                : `\`${esc(f.filename)}\``;
+              return `| ${statusIcon[f.status] ?? f.status} | [${name}](${fileUrl(f)}) | +${f.additions} | −${f.deletions} |`;
+            });
+
+            let filesMd = `**${files.length}** files, **+${additions}** / **−${deletions}** lines\n\n`;
+            const table = ['| Status | File | + | − |', '|---|---|---:|---:|', ...rows].join('\n');
+            filesMd += files.length > 15
+              ? `<details><summary>Show files</summary>\n\n${table}\n\n</details>`
+              : table;
+            if (files.length > MAX_FILES) {
+              filesMd += `\n\n_…and ${files.length - MAX_FILES} more, see the Files tab._`;
+            }
+
+            // --- Commits -------------------------------------------------------
+            const commitLines = commits.map((c) => {
+              const title = c.commit.message.split('\n')[0];
+              // A profile link instead of @login: a mention would notify the
+              // author again on every push that rewrites the description.
+              const author = c.author?.login
+                ? `[${c.author.login}](https://github.com/${c.author.login})`
+                : c.commit.author.name;
+              return `- [\`${c.sha.slice(0, 7)}\`](${c.html_url}) ${title} — ${author}`;
+            });
+            let commitsMd = commitLines.join('\n') || '_No commits._';
+            if (commits.length >= 250) {
+              commitsMd += '\n\n_GitHub returns at most 250 commits, the list may be incomplete._';
+            }
+
+            // --- Auto checks (project conventions) -----------------------------
+            const names = files.map((f) => f.filename);
+            const has = (re) => names.some((n) => re.test(n));
+            const touched = [];
+            const warnings = [];
+
+            if (has(/^database\/migrations\//)) touched.push('🗄️ Database migrations');
+            if (has(/^lang\//)) touched.push('🌐 Translations');
+            if (has(/^(Dockerfile|compose\.prod\.yml|docker-compose\.yml|docker\/|deploy\/|\.env\.example)/)) touched.push('🚀 Deployment / Docker');
+            if (has(/^composer\.(json|lock)$/)) touched.push('📦 Composer dependencies');
+            if (has(/^(README\.md|READMEua\.md|docs\/)/)) touched.push('📝 Documentation');
+            if (has(/^tests\//)) touched.push('🧪 Tests');
+
+            if (has(/^lang\/en\.json$/) !== has(/^lang\/uk\.json$/)) {
+              warnings.push('Only one of `lang/en.json` / `lang/uk.json` is changed - translations may be out of sync.');
+            }
+            if (has(/^README\.md$/) !== has(/^READMEua\.md$/)) {
+              warnings.push('Only one of `README.md` / `READMEua.md` is changed - keep both READMEs in sync.');
+            }
+            if (has(/^app\//) && !has(/^tests\//)) {
+              warnings.push('Code in `app/` changed, but no tests were added or updated.');
+            }
+            if (has(/^composer\.json$/) && !has(/^composer\.lock$/)) {
+              warnings.push('`composer.json` changed without `composer.lock`.');
+            }
+
+            let checksMd = touched.length ? `**Areas touched:** ${touched.join(', ')}` : '**Areas touched:** application code only';
+            checksMd += '\n\n' + (warnings.length
+              ? warnings.map((w) => `- ⚠️ ${w}`).join('\n')
+              : '- ✅ No convention warnings');
+
+            // --- Write the body ------------------------------------------------
+            const sections = { checks: checksMd, files: filesMd, commits: commitsMd };
+            const titles = { checks: 'Auto checks', files: 'Changed files', commits: 'Commits' };
+            let body = pr.body ?? '';
+
+            for (const [key, content] of Object.entries(sections)) {
+              const start = `<!-- auto:${key}:start -->`;
+              const end = `<!-- auto:${key}:end -->`;
+              const block = `${start}\n${content}\n${end}`;
+              const re = new RegExp(`${start}[\\s\\S]*?${end}`);
+              // PRs created without the template (e.g. `gh pr create --body`)
+              // get the missing sections appended at the end.
+              body = re.test(body)
+                ? body.replace(re, () => block)
+                : `${body.trimEnd()}\n\n## ${titles[key]}\n\n${block}\n`;
+            }
+
+            if (body === (pr.body ?? '')) {
+              core.info('Description is up to date.');
+              return;
+            }
+            await github.rest.pulls.update({ owner, repo, pull_number, body });
+            core.info('Description updated.');
